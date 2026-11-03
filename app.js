@@ -245,7 +245,7 @@ function openModal({ title, sub, body, foot, wide }) {
 }
 
 /* ---------- header ---------- */
-const TABS = [["compliance", "Compliance"], ["review", "Review queue"], ["roster", "Staff roster"], ["jds", "Job descriptions"], ["requirements", "Requirements"]];
+const TABS = [["compliance", "Compliance"], ["review", "Review queue"], ["roster", "Staff roster"], ["jds", "Job descriptions"], ["requirements", "Requirements"], ["admins", "Admins"]];
 function renderTabs() {
   const nav = $("#tabs"); nav.replaceChildren();
   nav.hidden = !S.isAdmin; $("#stripe").hidden = S.isAdmin;
@@ -257,34 +257,60 @@ function renderWho() {
   const w = $("#who"); w.replaceChildren();
   if (S.isAdmin) w.append(h("div", { style: "min-width:0;text-align:right" }, h("div", { class: "w-name" }, S.email), h("div", { class: "w-role" }, "Credentials office (admin)")),
     h("button", { class: "btn sm", onclick: async () => { await sb.auth.signOut(); location.hash = ""; location.reload(); } }, "Sign out"));
-  else w.append(h("button", { class: "btn sm ghost-paper", onclick: adminLogin }, "Admin sign in"));
+  else w.append(h("button", { class: "btn sm ghost-paper", onclick: () => adminLogin() }, "Admin sign in"));
 }
 function switchTab(id) { S.tab = id; S.built = null; try { history.replaceState(null, "", "#" + id); } catch (e) {} render(); }
 function render() {
   if (!S.ready) return;
   renderTabs(); renderWho();
   if (!S.isAdmin) return renderStaff();
-  ({ compliance: renderCompliance, review: renderReview, roster: renderRoster, jds: renderJds, requirements: renderRequirements }[S.tab] || renderCompliance)();
+  ({ compliance: renderCompliance, review: renderReview, roster: renderRoster, jds: renderJds, requirements: renderRequirements, admins: renderAdmins }[S.tab] || renderCompliance)();
 }
 function setMain(...kids) { $("#main").replaceChildren(...kids.filter(Boolean)); }
 const notice = (title, text) => h("div", { class: "panel empty" }, h("h2", null, title), h("p", { class: "muted" }, text));
 
-function adminLogin() {
-  const email = h("input", { type: "email", id: "ad-email", autocomplete: "username", value: CFG.adminEmail || "" });
-  const pass = h("input", { type: "password", id: "ad-pass", autocomplete: "current-password" });
+function setupErr(e) {
+  const m = (e && e.message) || "";
+  if (/Database error|not been added/i.test(m)) return "This email hasn't been added as an admin. Ask an existing admin to add you on the Admins tab.";
+  if (/already registered|already been registered|already exists/i.test(m)) return "This email already has a password. Use Sign in, or ask another admin to reset it.";
+  if (/Signups not allowed|signup.*disabled/i.test(m)) return "Account setup is switched off in Supabase. Turn on \u201cAllow new users to sign up\u201d (Authentication \u2192 Sign In / Providers).";
+  if (/confirmation email|sending/i.test(m)) return "Supabase tried to send a confirmation email. Turn off \u201cConfirm email\u201d (Authentication \u2192 Sign In / Providers \u2192 Email) and try again.";
+  if (/password/i.test(m)) return m;
+  return errText(e);
+}
+function adminLogin(mode) {
+  const setup = mode === "setup";
+  const email = h("input", { type: "email", id: "ad-email", autocomplete: "username", value: setup ? "" : CFG.adminEmail || "" });
+  const pass = h("input", { type: "password", id: "ad-pass", autocomplete: setup ? "new-password" : "current-password" });
+  const pass2 = h("input", { type: "password", id: "ad-pass2", autocomplete: "new-password" });
   const err = h("p", { class: "err", hidden: true });
-  const go = h("button", { class: "btn primary" }, "Sign in");
+  const go = h("button", { class: "btn primary" }, setup ? "Set password and sign in" : "Sign in");
+  const fail = m => { err.textContent = m; err.hidden = false; };
   go.onclick = () => busy(go, async () => {
     err.hidden = true;
-    const res = await sb.auth.signInWithPassword({ email: email.value.trim(), password: pass.value });
-    if (res.error) { err.textContent = errText(res.error); err.hidden = false; return; }
+    const em = email.value.trim().toLowerCase();
+    if (!em) return fail("Enter your email.");
+    if (setup) {
+      if (pass.value.length < 8) return fail("Use a password of at least 8 characters.");
+      if (pass.value !== pass2.value) return fail("The two passwords don't match.");
+      const up = await sb.auth.signUp({ email: em, password: pass.value });
+      if (up.error) return fail(setupErr(up.error));
+    }
+    const res = await sb.auth.signInWithPassword({ email: em, password: pass.value });
+    if (res.error) return fail(setup ? "This email already has a password. Use Sign in, or ask another admin to reset it." : errText(res.error));
     const adm = await sb.rpc("is_admin");
-    if (adm.data !== true) { await sb.auth.signOut(); err.textContent = "This account doesn't have admin access."; err.hidden = false; return; }
+    if (adm.data !== true) { await sb.auth.signOut(); return fail("This account doesn't have admin access."); }
     closeModal(); await startAdmin(res.data.session);
+    if (setup) toast("Your admin account is ready");
   });
-  pass.onkeydown = e => { if (e.key === "Enter") go.click(); };
-  openModal({ title: "Admin sign in", sub: "For the credentials office only. Staff don't need to sign in.",
-    body: [h("label", { class: "f", for: "ad-email" }, "Email", email), h("label", { class: "f", for: "ad-pass" }, "Password", pass), err],
+  (setup ? pass2 : pass).onkeydown = e => { if (e.key === "Enter") go.click(); };
+  const swap = h("button", { class: "btn sm ghost", onclick: () => { closeModal(); adminLogin(setup ? "" : "setup"); } }, setup ? "I already have a password" : "First time? Set your password");
+  openModal({ title: setup ? "Set up your admin account" : "Admin sign in",
+    sub: setup ? "For people an admin has added on the Admins tab. Choose your own password." : "For the credentials office only. Staff don't need to sign in.",
+    body: [h("label", { class: "f", for: "ad-email" }, setup ? "Your work email" : "Email", email),
+      h("label", { class: "f", for: "ad-pass" }, setup ? "New password (at least 8 characters)" : "Password", pass),
+      setup ? h("label", { class: "f", for: "ad-pass2" }, "Repeat new password", pass2) : null,
+      err, h("div", { class: "row" }, swap, setup ? null : h("span", { class: "hint" }, "Forgot your password? Ask another admin to reset it."))],
     foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go] });
   setTimeout(() => (email.value ? pass : email).focus(), 40);
 }
@@ -801,6 +827,55 @@ function rosterImportModal() {
         h("label", { class: "check" }, repl, "Replace the roster: remove anyone who isn't in this file"))),
       summary],
     foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go], wide: true });
+}
+
+/* ---------- admin: admins ---------- */
+async function renderAdmins() {
+  S.built = "admins";
+  const head = h("div", { class: "page-head" }, h("div", null, h("h1", null, "Admins"), h("p", { class: "muted" }, "People who can sign in to review documents and manage the portal. Every admin has full access.")),
+    h("button", { class: "btn primary", onclick: addAdminModal }, "Add admin"));
+  const box = h("section", { class: "panel" }, h("div", { class: "empty" }, h("p", { class: "muted" }, "Loading…")));
+  setMain(head, box);
+  const res = await sb.rpc("admin_list");
+  if (S.tab !== "admins") return;
+  if (res.error) { box.replaceChildren(h("div", { class: "empty" }, h("h3", null, "The admin list couldn't load"), h("p", { class: "muted" }, /admin_list|function/i.test(res.error.message || "") ? "The database needs updating: run supabase/schema.sql again in the Supabase SQL Editor, then refresh." : errText(res.error)))); return; }
+  const me = S.email.toLowerCase();
+  const list = h("div", { class: "list" });
+  for (const a of res.data || []) {
+    const self = a.email.toLowerCase() === me;
+    const state = !a.has_account ? ["warn", "Invited, hasn't set a password"] : a.last_sign_in_at ? ["ok", "Last signed in " + fmtTs(a.last_sign_in_at)] : ["neutral", "Password set, not signed in yet"];
+    const act = (fn, msg) => async () => { try { must(await sb.rpc(fn, { target: a.email })); toast(msg); renderAdmins(); } catch (e) { toast(errText(e), "bad"); } };
+    list.append(h("div", { class: "cred" }, h("div", { class: "code" }, (a.email[0] || "?").toUpperCase()),
+      h("div", { style: "min-width:0" }, h("div", { class: "cred-name" }, a.email, self ? h("span", { class: "muted" }, " (you)") : null),
+        h("div", { class: "cred-meta" }, [a.added_by ? "Added by " + a.added_by : "Original admin", a.added_at ? fmtTs(a.added_at) : null].filter(Boolean).join(" · "))),
+      h("span", { class: "chip " + state[0] }, state[1]),
+      h("div", { class: "acts" }, self ? null : [
+        a.has_account ? armed(h("button", { class: "btn sm" }, "Reset password"), "Confirm reset", act("admin_reset", `Password reset. ${a.email} can now choose a new one with \u201cFirst time? Set your password\u201d.`)) : h("button", { class: "btn sm", onclick: () => inviteText(a.email) }, "Instructions"),
+        armed(h("button", { class: "btn sm danger" }, "Remove"), "Confirm remove", act("admin_remove", `${a.email} is no longer an admin`))])));
+  }
+  box.replaceChildren(list, h("div", { class: "panel-body notice-row" }, h("p", { class: "hint" }, "Reset password removes the person's current password; they then set a new one from the sign-in screen. You can't reset or remove your own account here.")));
+}
+function inviteText(em) {
+  const url = location.origin + location.pathname;
+  const msg = `You've been added as an admin on the AMH Staff Credentials Portal.\n\n1. Open ${url}\n2. Click \u201cAdmin sign in\u201d, then \u201cFirst time? Set your password\u201d.\n3. Enter ${em} and choose your password.`;
+  const ta = h("textarea", { rows: "6", readonly: true }, msg);
+  const copy = h("button", { class: "btn primary" }, "Copy message");
+  copy.onclick = async () => { try { await navigator.clipboard.writeText(msg); toast("Copied"); } catch (e) { ta.select(); toast("Select the text and copy it", "bad"); } };
+  openModal({ title: "Send this to " + em, sub: "No email is sent automatically.", body: ta, foot: [h("button", { class: "btn", onclick: closeModal }, "Done"), copy] });
+}
+function addAdminModal() {
+  const email = h("input", { type: "email", id: "na-email", placeholder: "name@kfshrc.edu.sa" });
+  const err = h("p", { class: "err", hidden: true });
+  const go = h("button", { class: "btn primary" }, "Add admin");
+  go.onclick = () => busy(go, async () => {
+    const em = email.value.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { err.textContent = "Enter a valid email address."; err.hidden = false; return; }
+    must(await sb.rpc("admin_add", { new_email: em }));
+    closeModal(); await renderAdmins(); inviteText(em);
+  });
+  email.onkeydown = e => { if (e.key === "Enter") go.click(); };
+  openModal({ title: "Add admin", sub: "They'll have full access: all submissions, reviews, roster, job descriptions and requirements.",
+    body: [h("label", { class: "f", for: "na-email" }, "Work email", email), err], foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go] });
 }
 
 /* ---------- admin: job descriptions ---------- */

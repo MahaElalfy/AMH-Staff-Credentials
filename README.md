@@ -29,7 +29,11 @@ AlMather Hospital staff open the portal link (no sign-in, no emails), enter thei
 1. Open **Authentication → Users → Add user → Create new user**.
 2. Enter the admin email and a strong password, and tick **Auto Confirm User**.
 3. Click **Create user**. You'll use this email and password with the portal's **Admin sign in** button.
-4. Optional: in **Authentication → Sign In / Providers → Email**, turn off **Allow new users to sign up** so nobody else can create an account.
+
+### 3b. Allow invited admins to set their own password
+1. In **Authentication → Sign In / Providers**, turn **on** "Allow new users to sign up", and under **Email** turn **off** "Confirm email".
+2. This is safe: `schema.sql` blocks anyone whose email isn't on the portal's **Admins** tab from creating an account.
+3. To add an admin, sign in, open **Admins → Add admin**, then send them the message shown. They click **Admin sign in → First time? Set your password**.
 
 ### 4. Connect the page
 1. Open **Project Settings → API Keys** (on some projects it's under **Data API**).

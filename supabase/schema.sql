@@ -22,6 +22,63 @@ $$;
 alter table public.admins enable row level security;
 drop policy if exists "admins visible to admin" on public.admins;
 create policy "admins visible to admin" on public.admins for select to authenticated using (public.is_admin());
+alter table public.admins add column if not exists added_at timestamptz default now();
+alter table public.admins add column if not exists added_by text;
+
+-- Admin management from the portal (Admins tab). Each function checks the caller is an admin.
+create or replace function public.admin_list()
+returns table (email text, added_at timestamptz, added_by text, has_account boolean, last_sign_in_at timestamptz)
+language plpgsql stable security definer set search_path = public, auth as $$
+begin
+  if not public.is_admin() then raise exception 'not allowed'; end if;
+  return query
+    select a.email, a.added_at, a.added_by, u.id is not null, u.last_sign_in_at
+    from public.admins a left join auth.users u on lower(u.email) = lower(a.email)
+    order by a.added_at nulls first, a.email;
+end $$;
+
+create or replace function public.admin_add(new_email text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'not allowed'; end if;
+  if new_email is null or new_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'invalid email'; end if;
+  insert into public.admins (email, added_by) values (lower(trim(new_email)), auth.jwt() ->> 'email') on conflict do nothing;
+end $$;
+
+-- Removes the person's login so they can set a new password from the sign-in screen.
+create or replace function public.admin_reset(target text) returns void
+language plpgsql security definer set search_path = public, auth as $$
+begin
+  if not public.is_admin() then raise exception 'not allowed'; end if;
+  if lower(target) = lower(auth.jwt() ->> 'email') then raise exception 'cannot reset yourself'; end if;
+  if not exists (select 1 from public.admins where lower(email) = lower(target)) then raise exception 'not an admin'; end if;
+  delete from auth.users where lower(email) = lower(target);
+end $$;
+
+create or replace function public.admin_remove(target text) returns void
+language plpgsql security definer set search_path = public, auth as $$
+begin
+  if not public.is_admin() then raise exception 'not allowed'; end if;
+  if lower(target) = lower(auth.jwt() ->> 'email') then raise exception 'cannot remove yourself'; end if;
+  delete from public.admins where lower(email) = lower(target);
+  delete from auth.users where lower(email) = lower(target);
+end $$;
+revoke execute on function public.admin_list(), public.admin_add(text), public.admin_reset(text), public.admin_remove(text) from public, anon;
+grant execute on function public.admin_list(), public.admin_add(text), public.admin_reset(text), public.admin_remove(text) to authenticated;
+
+-- Only invited admin emails can create a login ("First time? Set your password" in the portal).
+-- Their account is confirmed straight away, so no email is needed.
+create or replace function public.only_invited_signups() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from public.admins where lower(email) = lower(new.email)) then
+    raise exception 'This email has not been added as an admin';
+  end if;
+  new.email_confirmed_at := coalesce(new.email_confirmed_at, now());
+  return new;
+end $$;
+drop trigger if exists only_invited_signups on auth.users;
+create trigger only_invited_signups before insert on auth.users for each row execute function public.only_invited_signups();
 
 -- ---------------------------------------------------------------
 -- Optional staff roster (import a CSV in Table Editor -> roster -> Insert -> Import data from CSV)

@@ -16,7 +16,7 @@ Instructions for Claude (or a person) on a computer that can reach GitHub. Unzip
 4. **Supabase setup.** Confirm the user has done the following, and help if not:
    - Run all of `supabase/schema.sql` in SQL Editor (https://supabase.com/dashboard/project/bufxfiahaqkchfeozbbi/sql/new).
    - Create the admin user: Authentication → Users → Add user → Create new user, with `malelfy@kfshrc.edu.sa`, a password the user chooses, and **Auto Confirm User** ticked.
-   - Optionally, turn off "Allow new users to sign up" (Authentication → Sign In / Providers → Email).
+   - Turn ON "Allow new users to sign up" and turn OFF "Confirm email" (Authentication → Sign In / Providers). Only emails on the Admins tab can create an account.
 5. **Test.**
    - Open the Pages URL. Submit a test entry (employee ID, name, department, position, one small PDF), then click "I'm finished".
    - Click **Admin sign in** and sign in. Check that the entry is in the Review queue and the file opens.
