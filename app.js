@@ -63,6 +63,16 @@ const WARN_DAYS = 60;
 const MAX_PDF = 5 * 1024 * 1024;
 const TONE = { missing: "bad", expired: "bad", rejected: "bad", pending: "pend", expiring: "warn", valid: "ok" };
 const SCFHS_CLASSES = ["Consultant", "Senior Registrar / Senior Specialist", "Registrar / Specialist", "Resident", "General Practitioner", "Senior Specialist Nurse", "Specialist Nurse", "Nurse Technician", "Other"];
+// Urgent notice shown at the top of the staff page. Set to null to remove it.
+const ANNOUNCE = {
+  en: ["Upload your credentials today for the CBAHI ESR survey", "In preparation for the CBAHI Essential Safety Requirements (ESR) survey, every staff member must upload their current credentials today. Missing or expired credentials will be recorded as non-compliant during the survey."],
+  ar: ["يرجى رفع الشهادات والمؤهلات اليوم استعداداً لزيارة سباهي لمتطلبات السلامة الأساسية", "استعداداً لزيارة المركز السعودي لاعتماد المنشآت الصحية (سباهي) لتقييم متطلبات السلامة الأساسية (ESR)، يجب على جميع الموظفين رفع شهاداتهم ومؤهلاتهم السارية اليوم. ستُسجَّل الشهادات الناقصة أو المنتهية كعدم امتثال أثناء الزيارة."]
+};
+function announceBanner() {
+  if (!ANNOUNCE) return null;
+  const part = (lang, [t, b]) => h("div", { lang, dir: lang === "ar" ? "rtl" : "ltr" }, h("strong", { style: "display:block;margin-bottom:2px" }, t), h("span", null, b));
+  return h("div", { class: "announce", role: "alert" }, part("en", ANNOUNCE.en), part("ar", ANNOUNCE.ar));
+}
 const credExtra = item => item ? [item.classification, item.specialty].filter(Boolean).join(", ") : "";
 
 /* ---------- requirement logic ---------- */
@@ -246,7 +256,7 @@ function render() {
   if (!S.isAdmin) return renderStaff();
   ({ compliance: renderCompliance, review: renderReview, roster: renderRoster, jds: renderJds, requirements: renderRequirements }[S.tab] || renderCompliance)();
 }
-function setMain(...kids) { $("#main").replaceChildren(...kids); }
+function setMain(...kids) { $("#main").replaceChildren(...kids.filter(Boolean)); }
 const notice = (title, text) => h("div", { class: "panel empty" }, h("h2", null, title), h("p", { class: "muted" }, text));
 
 function adminLogin() {
@@ -274,8 +284,9 @@ function renderStaff() {
   if (!S.matrix) return setMain(notice("The portal isn't open yet", "The credentials office is still setting up the requirements. Check back soon."));
   const head = h("div", { class: "page-head" }, h("div", null, h("h1", null, "Submit your credentials"),
     h("p", { class: "muted" }, "Enter your details, then upload your certificates and sign your job description. The credentials office reviews every document.")));
+  const ann = announceBanner();
   if (S.finished) return setMain(head, finishedPanel());
-  if (!S.person) return setMain(head, detailsPanel());
+  if (!S.person) return setMain(head, ann, detailsPanel());
   const p = S.person;
   const who = h("div", { class: "panel profile" },
     pf("Name", p.fullName), pf("Employee ID", p.employeeId), pf("Department", deptName(p.dept)), pf("Position", p.position),
@@ -305,7 +316,7 @@ function renderStaff() {
       h("div", { class: "acts" }, s ? h("button", { class: "btn sm ghost", onclick: () => showDoc(j.title, `Version ${j.version}`, jdBlob(j.path), j.fileName) }, "View")
         : h("button", { class: "btn sm primary", onclick: () => signModal(j) }, "Review and sign"))));
   }
-  const parts = [head, who, creds];
+  const parts = [head, ann, who, creds].filter(Boolean);
   if (jlist.length) parts.push(h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, "Job description")), jl));
   const nSent = Object.keys(S.sent).length + Object.keys(S.signed).length;
   parts.push(h("div", { class: "savebar" }, h("span", { class: "grow" }, nSent ? `${nSent} item${nSent === 1 ? "" : "s"} submitted` : "Nothing submitted yet"),
