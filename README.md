@@ -1,74 +1,69 @@
 # AMH Staff Credentials Portal
 
-AlMather Hospital staff sign in with their hospital email and enter their employee ID, full name, department and position. They then upload their required credentials (ACLS, BLS, ATLS, PALS, NRP, SCFHS registration and classification, DataFlow, CV) and sign their job description. Only the administrator can see everyone's uploads, review them and export the compliance report.
+AlMather Hospital staff open the portal link (no sign-in, no emails), enter their employee ID, full name, department and position, then upload their required credentials (ACLS, BLS, ATLS, PALS, NRP, SCFHS registration and classification, DataFlow, CV) and sign their job description. Only the administrator signs in, with a password, to see and review everything.
 
-- **Page:** static files hosted on GitHub Pages (`index.html`, `config.js`, `logo.png`).
-- **Data and files:** Supabase (database, private file storage, email sign-in codes).
+- **Page:** static files hosted on GitHub Pages (`index.html`, `app.js`, `config.js`, `logo.png`).
+- **Data and files:** Supabase (database and private file storage).
 - **Access rules:** enforced by the database (`supabase/schema.sql`), not just the page:
-  - Staff can create and see **only their own** profile, uploads and signatures. They cannot approve their own documents.
-  - Only emails listed in `public.admins` can see everyone's records, verify or return documents, upload job descriptions and change requirements.
-  - Only emails on the domains in `public.allowed_domains` can sign up or upload.
+  - Anyone with the link can **submit** documents and signatures, but **cannot read anything back**, not even their own.
+  - Only the admin email in `public.admins` can sign in to view, verify, export, upload job descriptions and change requirements.
+  - Optional **staff roster**: once you import one, only listed employee IDs can submit, and the Compliance view also shows who hasn't submitted yet.
 
+> Because staff don't sign in, anyone who has the link can submit under any employee ID. The admin review (checking each document against the primary source) and the optional roster are the safeguards. Share the link only internally.
+>
 > Before going live, confirm with KFSHRC IT / data protection that storing staff personal data in Supabase (an external cloud service) is approved under PDPL and hospital policy.
 
-## Setup (about 30 minutes)
+## Setup (about 20 minutes)
 
 ### 1. Create the Supabase project
 1. Sign up at https://supabase.com and create a new project.
-2. **Region:** choose **Middle East (Bahrain)** if available.
+2. **Region:** choose **Middle East (Bahrain)** if it's offered.
 3. Save the database password somewhere safe.
 
 ### 2. Create the tables, storage and access rules
-1. In the project, open **SQL Editor → New query**.
-2. Paste the whole of `supabase/schema.sql` and click **Run**.
-3. Check the two settings near the top of that file before running:
-   - `admins`: the administrator's email (currently `malelfy@kfshrc.edu.sa`).
-   - `allowed_domains`: the email domains staff may use (currently `kfshrc.edu.sa`). Add any other AMH domain, for example:
-     ```sql
-     insert into public.allowed_domains (domain) values ('example-amh-domain.sa');
-     ```
+1. Open **SQL Editor → New query**.
+2. Paste the whole of `supabase/schema.sql` and click **Run**. You should see "Success. No rows returned".
+3. The admin email is set near the top of that file (`malelfy@kfshrc.edu.sa`). Change it before running if needed.
 
-### 3. Turn on email sign-in codes
-1. **Authentication → Sign In / Providers → Email:** keep Email enabled. Turn **Confirm email** on.
-2. **Authentication → Email Templates:** edit **Magic Link** and **Confirm signup** so the email shows the code. Replace the body with something like:
-   ```html
-   <h2>AlMather Hospital Credentials Portal</h2>
-   <p>Your sign-in code is:</p>
-   <p style="font-size:28px;font-weight:bold;letter-spacing:4px">{{ .Token }}</p>
-   <p>The code expires shortly. If you didn't request it, ignore this email.</p>
-   ```
-3. **Authentication → SMTP Settings:** set up a real email sender. Supabase's built-in sender only allows a few emails per hour, which is fine for testing but not for staff. Ask IT for SMTP details for a hospital address (for example `credentials@...`), or use a service such as Resend, SendGrid or Amazon SES.
-4. **Authentication → Rate Limits:** raise "emails sent per hour" once SMTP is set up.
+### 3. Create your admin login (no email is sent)
+1. Open **Authentication → Users → Add user → Create new user**.
+2. Enter the admin email and a strong password, and tick **Auto Confirm User**.
+3. Click **Create user**. You'll use this email and password with the portal's **Admin sign in** button.
+4. Optional: in **Authentication → Sign In / Providers → Email**, turn off **Allow new users to sign up** so nobody else can create an account.
 
 ### 4. Connect the page
-1. In Supabase open **Project Settings → API**. Copy the **Project URL** and the **anon public** key.
-2. Put them in `config.js`. Never use the `service_role` key here.
-3. Keep `allowedDomains` in `config.js` the same as the `allowed_domains` table.
+1. Open **Project Settings → API Keys** (on some projects it's under **Data API**).
+2. Copy the **Project URL** and the **anon / publishable** key into `config.js`.
+3. Never use the `service_role` or secret key.
 
 ### 5. Publish on GitHub Pages
-1. Create a GitHub repository (for example `amh-credentials-portal`) and upload these files.
-2. **Settings → Pages:** Source = *Deploy from a branch*, Branch = `main`, folder `/ (root)`.
-3. After a minute the portal is at `https://<your-github-name>.github.io/amh-credentials-portal/`.
-4. In Supabase **Authentication → URL Configuration**, set **Site URL** to that address.
+1. Upload these files to a public GitHub repository, for example `amh-credentials-portal`.
+2. **Settings → Pages:** Source = *Deploy from a branch*, Branch = `main`, folder `/ (root)`, then **Save**.
+3. After about a minute the portal is at `https://<your-github-name>.github.io/amh-credentials-portal/`.
 
-### 6. Test before sending to staff
-1. Open the portal and sign in with the admin email. You should see the Compliance, Review queue, Job descriptions and Requirements tabs.
-2. In a private browser window, sign in as a test staff member. Enter employee ID, name, department and position, upload one certificate and sign a test JD.
-3. As admin, open the Review queue, view the file and verify it.
-4. Check that the test staff account **cannot** see the admin tabs.
+### 6. Optional: import a staff roster
+1. Make a CSV with the columns `employee_id,full_name,dept,position`. For `dept`, use the department codes from the Requirements tab: `em`, `anes`, `icu`, `nicu`, `or`, `ward`, `opd`.
+2. In Supabase open **Table Editor → roster → Insert → Import data from CSV**.
+3. From then on only those employee IDs can submit, and people who haven't submitted appear as "Not yet submitted".
+
+### 7. Test before sending to staff
+1. Open the portal. Enter a test employee ID, name, department and position, upload one certificate, and click **I'm finished**.
+2. Click **Admin sign in** and sign in. The submission should be in the **Review queue**. Open it and verify it.
+3. Sign out, reload, and check that the public page shows no one's data.
 
 ## Limits and costs
-- Supabase free plan: 1 GB file storage and 500 MB database. That's roughly 300–500 staff with compressed uploads. Pro plan is about US$25/month for 100 GB.
+- Supabase free plan: 1 GB file storage and 500 MB database, roughly 300–500 staff with compressed uploads. Pro plan is about US$25/month for 100 GB.
 - Free-plan projects pause after a week with no activity; upgrade to Pro for continuous use.
 - Uploads: PDF up to 5 MB; photos are compressed in the browser. Job descriptions: PDF up to 20 MB.
-- Every upload is kept in the history. Staff cannot delete or change past submissions.
-- No automatic email reminders yet. Expiring items show in the portal and the CSV export.
+- Every submission is kept. Staff can't view, change or delete anything after submitting.
+- When you return a document, staff aren't notified automatically. Contact them using the mobile number they entered.
 
 ## Files
 | File | What it is |
 |---|---|
-| `index.html` | The whole portal (staff and admin views) |
-| `config.js` | Supabase URL, anon key and allowed email domains |
+| `index.html` | Page layout and styles |
+| `app.js` | The portal: staff submission form and admin views |
+| `config.js` | Supabase URL and anon key |
 | `logo.png` | AlMather Hospital / KFSHRC lockup |
-| `supabase/schema.sql` | Tables, private storage buckets, access rules and starting requirements |
+| `supabase/schema.sql` | Tables, private storage, access rules and starting requirements |
 | `.nojekyll` | Tells GitHub Pages to serve the files as they are |

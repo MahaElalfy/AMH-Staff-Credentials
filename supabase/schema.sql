@@ -1,36 +1,51 @@
 -- AMH Staff Credentials Portal: database, storage and access rules.
 -- Run once in Supabase: SQL Editor -> New query -> paste this file -> Run.
--- Safe to re-run: tables use IF NOT EXISTS and policies are dropped first.
+--
+-- How access works:
+--   * Staff do NOT sign in. Anyone with the portal link can SUBMIT (insert) documents
+--     and signatures, but cannot read anything back: not their own, not anyone else's.
+--   * The administrator signs in with email + password (created in the Supabase dashboard,
+--     no emails are sent) and is the only one who can read, review and export.
+--   * Optional staff roster: if public.roster has any rows, only listed employee IDs can submit.
 
 -- ---------------------------------------------------------------
--- Who may use the portal and who is the administrator
+-- Administrator
 -- ---------------------------------------------------------------
 create table if not exists public.admins (email text primary key);
-create table if not exists public.allowed_domains (domain text primary key);
-
 -- The only administrator. Change or add rows to grant admin access.
 insert into public.admins (email) values ('malelfy@kfshrc.edu.sa') on conflict do nothing;
--- Staff must sign in with an email on one of these domains.
-insert into public.allowed_domains (domain) values ('kfshrc.edu.sa') on conflict do nothing;
 
 create or replace function public.is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.admins where lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')));
 $$;
-
-create or replace function public.email_allowed() returns boolean
-language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.allowed_domains
-                 where domain = lower(split_part(coalesce(auth.jwt() ->> 'email', ''), '@', 2)));
-$$;
-
 alter table public.admins enable row level security;
-alter table public.allowed_domains enable row level security;
 drop policy if exists "admins visible to admin" on public.admins;
 create policy "admins visible to admin" on public.admins for select to authenticated using (public.is_admin());
 
 -- ---------------------------------------------------------------
--- Requirements matrix (one JSON document)
+-- Optional staff roster (import a CSV in Table Editor -> roster -> Insert -> Import data from CSV)
+-- ---------------------------------------------------------------
+create table if not exists public.roster (
+  employee_id text primary key,
+  full_name text,
+  dept text,
+  position text
+);
+alter table public.roster enable row level security;
+drop policy if exists "roster admin" on public.roster;
+create policy "roster admin" on public.roster for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+-- True when the roster is empty (no check) or the ID is on it. Callable by the public form.
+create or replace function public.employee_ok(eid text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select not exists (select 1 from public.roster)
+      or exists (select 1 from public.roster where lower(employee_id) = lower(trim(eid)));
+$$;
+grant execute on function public.employee_ok(text) to anon, authenticated;
+
+-- ---------------------------------------------------------------
+-- Requirements matrix (one JSON document): everyone reads, admin writes
 -- ---------------------------------------------------------------
 create table if not exists public.settings (
   key text primary key,
@@ -40,41 +55,19 @@ create table if not exists public.settings (
 alter table public.settings enable row level security;
 drop policy if exists "settings read" on public.settings;
 drop policy if exists "settings write" on public.settings;
-create policy "settings read" on public.settings for select to authenticated using (public.email_allowed() or public.is_admin());
+create policy "settings read" on public.settings for select to anon, authenticated using (true);
 create policy "settings write" on public.settings for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- ---------------------------------------------------------------
--- Staff profiles: each person writes only their own
--- ---------------------------------------------------------------
-create table if not exists public.staff_profiles (
-  user_id uuid primary key default auth.uid() references auth.users on delete cascade,
-  email text not null,
-  full_name text not null,
-  employee_id text not null unique,
-  dept text not null,
-  position text not null,
-  mobile text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-alter table public.staff_profiles enable row level security;
-drop policy if exists "profile read" on public.staff_profiles;
-drop policy if exists "profile insert" on public.staff_profiles;
-drop policy if exists "profile update" on public.staff_profiles;
-drop policy if exists "profile delete" on public.staff_profiles;
-create policy "profile read" on public.staff_profiles for select to authenticated using (user_id = auth.uid() or public.is_admin());
-create policy "profile insert" on public.staff_profiles for insert to authenticated
-  with check (user_id = auth.uid() and public.email_allowed() and lower(email) = lower(auth.jwt() ->> 'email'));
-create policy "profile update" on public.staff_profiles for update to authenticated
-  using (user_id = auth.uid()) with check (user_id = auth.uid() and lower(email) = lower(auth.jwt() ->> 'email'));
-create policy "profile delete" on public.staff_profiles for delete to authenticated using (public.is_admin());
-
--- ---------------------------------------------------------------
--- Credential submissions: every upload is kept; staff cannot edit or approve them
+-- Credential submissions: public can insert only; admin reads and reviews
 -- ---------------------------------------------------------------
 create table if not exists public.submissions (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null default auth.uid() references public.staff_profiles(user_id) on delete cascade,
+  employee_id text not null check (length(trim(employee_id)) between 1 and 40),
+  full_name text not null check (length(trim(full_name)) between 2 and 120),
+  dept text not null,
+  position text not null,
+  mobile text,
   cred_id text not null,
   number text,
   classification text,
@@ -91,25 +84,24 @@ create table if not exists public.submissions (
   reviewed_at timestamptz,
   reviewed_by text
 );
-create index if not exists submissions_user_cred on public.submissions (user_id, cred_id, uploaded_at desc);
+create index if not exists submissions_emp_cred on public.submissions (employee_id, cred_id, uploaded_at desc);
 alter table public.submissions enable row level security;
-drop policy if exists "submission read" on public.submissions;
 drop policy if exists "submission insert" on public.submissions;
+drop policy if exists "submission admin read" on public.submissions;
 drop policy if exists "submission review" on public.submissions;
-create policy "submission read" on public.submissions for select to authenticated using (user_id = auth.uid() or public.is_admin());
-create policy "submission insert" on public.submissions for insert to authenticated
-  with check (user_id = auth.uid() and public.email_allowed() and status = 'pending'
-              and reviewed_at is null and reviewed_by is null and review_note is null
-              and split_part(file_path, '/', 1) = auth.uid()::text);
+create policy "submission insert" on public.submissions for insert to anon, authenticated
+  with check (status = 'pending' and reviewed_at is null and reviewed_by is null and review_note is null
+              and file_path like 'incoming/%' and public.employee_ok(employee_id));
+create policy "submission admin read" on public.submissions for select to authenticated using (public.is_admin());
 create policy "submission review" on public.submissions for update to authenticated using (public.is_admin()) with check (public.is_admin());
 
--- Latest submission per person and credential (respects the rules above)
+-- Latest submission per employee and credential (admin only, through the rules above)
 create or replace view public.current_submissions with (security_invoker = on) as
-  select distinct on (user_id, cred_id) * from public.submissions
-  order by user_id, cred_id, uploaded_at desc;
+  select distinct on (employee_id, cred_id) * from public.submissions
+  order by employee_id, cred_id, uploaded_at desc;
 
 -- ---------------------------------------------------------------
--- Job descriptions and signatures
+-- Job descriptions (everyone reads so staff can sign; admin writes) and signatures
 -- ---------------------------------------------------------------
 create table if not exists public.job_descriptions (
   id uuid primary key default gen_random_uuid(),
@@ -128,12 +120,15 @@ create table if not exists public.job_descriptions (
 alter table public.job_descriptions enable row level security;
 drop policy if exists "jd read" on public.job_descriptions;
 drop policy if exists "jd write" on public.job_descriptions;
-create policy "jd read" on public.job_descriptions for select to authenticated using (public.email_allowed() or public.is_admin());
+create policy "jd read" on public.job_descriptions for select to anon, authenticated using (true);
 create policy "jd write" on public.job_descriptions for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 create table if not exists public.jd_signatures (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null default auth.uid() references public.staff_profiles(user_id) on delete cascade,
+  employee_id text not null,
+  full_name text not null,
+  dept text,
+  position text,
   jd_id uuid not null references public.job_descriptions(id) on delete cascade,
   version integer not null,
   typed_name text not null,
@@ -141,11 +136,11 @@ create table if not exists public.jd_signatures (
   signed_at timestamptz not null default now()
 );
 alter table public.jd_signatures enable row level security;
-drop policy if exists "signature read" on public.jd_signatures;
 drop policy if exists "signature insert" on public.jd_signatures;
-create policy "signature read" on public.jd_signatures for select to authenticated using (user_id = auth.uid() or public.is_admin());
-create policy "signature insert" on public.jd_signatures for insert to authenticated
-  with check (user_id = auth.uid() and public.email_allowed() and split_part(signature_path, '/', 1) = auth.uid()::text);
+drop policy if exists "signature admin read" on public.jd_signatures;
+create policy "signature insert" on public.jd_signatures for insert to anon, authenticated
+  with check (signature_path like 'incoming/%' and public.employee_ok(employee_id));
+create policy "signature admin read" on public.jd_signatures for select to authenticated using (public.is_admin());
 
 -- ---------------------------------------------------------------
 -- Private file storage
@@ -155,18 +150,17 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
   ('jds', 'jds', false, 20971520, array['application/pdf'])
 on conflict (id) do nothing;
 
-drop policy if exists "credentials upload own" on storage.objects;
-drop policy if exists "credentials read own or admin" on storage.objects;
+drop policy if exists "credentials public upload" on storage.objects;
+drop policy if exists "credentials admin read" on storage.objects;
 drop policy if exists "jds read" on storage.objects;
 drop policy if exists "jds admin insert" on storage.objects;
 drop policy if exists "jds admin update" on storage.objects;
 drop policy if exists "jds admin delete" on storage.objects;
-create policy "credentials upload own" on storage.objects for insert to authenticated
-  with check (bucket_id = 'credentials' and (storage.foldername(name))[1] = auth.uid()::text and public.email_allowed());
-create policy "credentials read own or admin" on storage.objects for select to authenticated
-  using (bucket_id = 'credentials' and ((storage.foldername(name))[1] = auth.uid()::text or public.is_admin()));
-create policy "jds read" on storage.objects for select to authenticated
-  using (bucket_id = 'jds' and (public.email_allowed() or public.is_admin()));
+create policy "credentials public upload" on storage.objects for insert to anon, authenticated
+  with check (bucket_id = 'credentials' and (storage.foldername(name))[1] = 'incoming');
+create policy "credentials admin read" on storage.objects for select to authenticated
+  using (bucket_id = 'credentials' and public.is_admin());
+create policy "jds read" on storage.objects for select to anon, authenticated using (bucket_id = 'jds');
 create policy "jds admin insert" on storage.objects for insert to authenticated with check (bucket_id = 'jds' and public.is_admin());
 create policy "jds admin update" on storage.objects for update to authenticated using (bucket_id = 'jds' and public.is_admin());
 create policy "jds admin delete" on storage.objects for delete to authenticated using (bucket_id = 'jds' and public.is_admin());
