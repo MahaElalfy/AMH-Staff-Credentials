@@ -7,6 +7,7 @@ Instructions for Claude (or a person) on a computer that can reach GitHub. Unzip
 - The git history is included (`.git`). The remote is already set to `https://github.com/MahaElalfy/AMH-Staff-Credentials.git` (branch `main`).
 - Supabase project: `https://bufxfiahaqkchfeozbbi.supabase.co` (already in `config.js`).
 - Supabase publishable key is set in `config.js`.
+- Code is on `main` and GitHub Pages is enabled (branch `main`, `/ (root)`). Site: https://mahaelalfy.github.io/AMH-Staff-Credentials/
 
 ## Steps
 1. **Anon key.** Ask the user for the Supabase **anon** or **publishable** key: Dashboard → Project Settings → API Keys, or https://supabase.com/dashboard/project/bufxfiahaqkchfeozbbi/settings/api-keys. Put it in `config.js` as `supabaseAnonKey`. Never accept or commit the `service_role` / secret key. Commit the change.
