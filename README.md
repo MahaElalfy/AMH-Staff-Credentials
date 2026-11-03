@@ -42,9 +42,13 @@ AlMather Hospital staff open the portal link (no sign-in, no emails), enter thei
 3. After about a minute the portal is at `https://<your-github-name>.github.io/amh-credentials-portal/`.
 
 ### 6. Optional: import a staff roster
-1. Make a CSV with the columns `employee_id,full_name,dept,position`. For `dept`, use the department codes from the Requirements tab: `em`, `anes`, `icu`, `nicu`, `or`, `ward`, `opd`.
-2. In Supabase open **Table Editor → roster → Insert → Import data from CSV**.
-3. From then on only those employee IDs can submit, and people who haven't submitted appear as "Not yet submitted".
+Do this in the portal: sign in as admin and open the **Staff roster** tab.
+1. Export the staff list from HR and save it from Excel as **CSV UTF-8**, with the columns `employee_id,full_name,dept,position`. Only `employee_id` is required. `dept` can be the department name (for example *Intensive Care Unit*) or its code (`em`, `anes`, `icu`, `nicu`, `or`, `ward`, `opd`). Click **CSV template** for an example.
+2. Click **Import CSV**, choose the file and check the summary: new people, updated people, and any rows that were skipped or had an unknown department or position.
+3. Choose **Add new people and update existing ones**, or **Replace the roster** to also remove anyone not in the file (use this for leavers). Then click **Import**.
+4. From then on only those employee IDs can submit or sign. Anyone else sees "That employee ID isn't on the staff list". The database enforces this too, not just the page.
+5. Use **Add person**, **Edit** and **Remove** for single changes, and **Export roster** to download the list with who has submitted. **Remove everyone** turns the check off again.
+6. If people submitted before you imported the roster, the tab offers to add them in one click.
 
 ### 7. Test before sending to staff
 1. Open the portal. Enter a test employee ID, name, department and position, upload one certificate, and click **I'm finished**.

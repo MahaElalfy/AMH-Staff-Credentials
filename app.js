@@ -54,7 +54,7 @@ function armed(btn, label, fn) {
 /* ---------- state ---------- */
 const S = {
   ready: false, isAdmin: false, email: "",
-  matrix: null, jds: [], staff: [], tab: "compliance", built: null,
+  matrix: null, jds: [], staff: [], roster: [], rq: "", tab: "compliance", built: null,
   person: null, sent: {}, signed: {}, finished: false,
   f: { dept: "", status: "", q: "" }, draft: null, dirty: false
 };
@@ -135,6 +135,7 @@ async function refresh() {
       if (!cur || r.version > cur.version) u.signatures[r.jd_id] = { version: r.version, typedName: r.typed_name, signedAt: r.signed_at, path: r.signature_path, fileName: "signature.png" };
       touchPerson(u, r, r.signed_at); }
     S.staff = Object.values(by);
+    S.roster = roster.sort((a, b) => (a.full_name || "").localeCompare(b.full_name || "") || a.employee_id.localeCompare(b.employee_id));
   }
   render();
 }
@@ -224,7 +225,7 @@ function openModal({ title, sub, body, foot, wide }) {
 }
 
 /* ---------- header ---------- */
-const TABS = [["compliance", "Compliance"], ["review", "Review queue"], ["jds", "Job descriptions"], ["requirements", "Requirements"]];
+const TABS = [["compliance", "Compliance"], ["review", "Review queue"], ["roster", "Staff roster"], ["jds", "Job descriptions"], ["requirements", "Requirements"]];
 function renderTabs() {
   const nav = $("#tabs"); nav.replaceChildren();
   nav.hidden = !S.isAdmin; $("#stripe").hidden = S.isAdmin;
@@ -243,7 +244,7 @@ function render() {
   if (!S.ready) return;
   renderTabs(); renderWho();
   if (!S.isAdmin) return renderStaff();
-  ({ compliance: renderCompliance, review: renderReview, jds: renderJds, requirements: renderRequirements }[S.tab] || renderCompliance)();
+  ({ compliance: renderCompliance, review: renderReview, roster: renderRoster, jds: renderJds, requirements: renderRequirements }[S.tab] || renderCompliance)();
 }
 function setMain(...kids) { $("#main").replaceChildren(...kids); }
 const notice = (title, text) => h("div", { class: "panel empty" }, h("h2", null, title), h("p", { class: "muted" }, text));
@@ -460,7 +461,7 @@ function renderCompliance() {
       [["", "Any status"], ["none", "Not yet submitted"], ["bad", "Action needed"], ["jd", "Signature needed"], ["pend", "Awaiting review"], ["expiring", "Expiring within 60 days"], ["ok", "Compliant"]].map(([v, l]) => h("option", { value: v }, l)));
     st.value = S.f.status;
     setMain(
-      h("div", { class: "page-head" }, h("div", null, h("h1", null, "Compliance"), h("p", { class: "muted" }, "Everyone who has submitted (and everyone on the staff roster, if you've imported one) against the requirements for their department and position. Select a person to review their documents.")),
+      h("div", { class: "page-head" }, h("div", null, h("h1", null, "Compliance"), h("p", { class: "muted" }, "Everyone who has submitted (and everyone on the Staff roster tab) against the requirements for their department and position. Select a person to review their documents.")),
         h("div", { class: "row" }, h("button", { class: "btn", onclick: e => busy(e.currentTarget, () => reload("Refreshed")) }, "Refresh"), h("button", { class: "btn", onclick: exportCsv }, "Export CSV"))),
       h("div", { class: "tiles", id: "tiles" }),
       h("section", { class: "panel" }, h("div", { class: "filters" }, h("div", { class: "grow" }, q), dept, st), h("div", { id: "ctbl" })));
@@ -579,6 +580,189 @@ function renderReview() {
     h("span", { class: "chip pend" }, "Awaiting review"),
     h("div", { class: "acts" }, reviewButtons(r))));
   setMain(head, h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, `${q.length} document${q.length === 1 ? "" : "s"} waiting`)), list));
+}
+
+/* ---------- admin: staff roster ---------- */
+function parseCsv(text) {
+  text = text.replace(/^﻿/, "");
+  const first = text.split(/\r?\n/, 1)[0] || "";
+  const delim = [",", ";", "\t"].map(d => [d, first.split(d).length]).sort((a, b) => b[1] - a[1])[0][0];
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === delim) { row.push(cell); cell = ""; }
+    else if (ch === "\n" || ch === "\r") { if (ch === "\r" && text[i + 1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; }
+    else cell += ch;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.map(r => r.map(c => c.trim())).filter(r => r.some(Boolean));
+}
+const ROSTER_COLS = {
+  employee_id: /^(employee ?(id|no|number)|emp ?(id|no)|id|staff ?(id|no)|badge( ?no)?)$/,
+  full_name: /^(full ?name|name|employee ?name|staff ?name)$/,
+  dept: /^(dept|department|department ?(code|name)|unit)$/,
+  position: /^(position|job ?title|title|role|designation)$/
+};
+const matchDept = v => { const k = v.trim().toLowerCase(); return k ? M().departments.find(d => d.id.toLowerCase() === k || d.name.toLowerCase() === k) : null; };
+const matchPos = v => { const k = v.trim().toLowerCase(); return k ? M().positions.find(x => x.toLowerCase() === k) : null; };
+// Turns parsed CSV rows into roster records. Unknown departments/positions are left blank (with a warning) so the person's own choice is used.
+function readRoster(rows) {
+  const out = [], notes = [], seen = new Set();
+  if (!rows.length) return { out, notes: ["The file is empty."] };
+  const norm = c => c.toLowerCase().replace(/#/g, " no").replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim();
+  const head = rows[0].map(norm);
+  const idx = {}; for (const [k, re] of Object.entries(ROSTER_COLS)) idx[k] = head.findIndex(c => re.test(c));
+  let body = rows.slice(1);
+  if (idx.employee_id < 0) { body = rows; Object.assign(idx, { employee_id: 0, full_name: 1, dept: 2, position: 3 }); notes.push("No header row was recognised, so the columns were read in the order: employee ID, full name, department, position."); }
+  const existing = new Map(S.roster.map(r => [r.employee_id.toLowerCase(), r.employee_id]));
+  body.forEach((r, i) => {
+    const line = i + (body === rows ? 1 : 2), get = k => idx[k] >= 0 ? (r[idx[k]] || "").trim() : "";
+    let id = get("employee_id");
+    if (!id) return notes.push(`Row ${line}: no employee ID, skipped.`);
+    if (id.length > 40) return notes.push(`Row ${line}: employee ID is too long, skipped.`);
+    const key = id.toLowerCase();
+    if (seen.has(key)) return notes.push(`Row ${line}: employee ID ${id} appears more than once; the first row was used.`);
+    seen.add(key); id = existing.get(key) || id;
+    const dv = get("dept"), pv = get("position"), d = matchDept(dv), ps = matchPos(pv);
+    if (dv && !d) notes.push(`Row ${line}: department “${dv}” isn't in the department list, left blank.`);
+    if (pv && !ps) notes.push(`Row ${line}: position “${pv}” isn't in the position list, left blank.`);
+    out.push({ employee_id: id, full_name: get("full_name") || null, dept: d ? d.id : null, position: ps || null });
+  });
+  return { out, notes };
+}
+async function saveRoster(rows, replace) {
+  for (let i = 0; i < rows.length; i += 500) must(await sb.from("roster").upsert(rows.slice(i, i + 500), { onConflict: "employee_id" }));
+  if (replace) {
+    const keep = new Set(rows.map(r => r.employee_id.toLowerCase()));
+    await deleteRoster(S.roster.filter(r => !keep.has(r.employee_id.toLowerCase())).map(r => r.employee_id));
+  }
+}
+async function deleteRoster(ids) { for (let i = 0; i < ids.length; i += 100) must(await sb.from("roster").delete().in("employee_id", ids.slice(i, i + 100))); }
+function csvLine(vals) { return vals.map(v => { const s = String(v == null ? "" : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(","); }
+function rosterTemplate() {
+  const m = M(), d = m.departments[0], p = m.positions[0];
+  const lines = ["employee_id,full_name,dept,position", csvLine(["100234", "Example Name", d ? d.id : "", p || ""])];
+  saveBlob("AMH-staff-roster-template.csv", new Blob(["﻿" + lines.join("\n")], { type: "text/csv" }));
+}
+function rosterExport() {
+  const sub = new Set(S.staff.filter(p => p.hasSubmitted).map(p => p.uid));
+  const lines = [csvLine(["employee_id", "full_name", "dept", "position", "department_name", "submitted"])];
+  for (const r of S.roster) lines.push(csvLine([r.employee_id, r.full_name, r.dept, r.position, r.dept ? deptName(r.dept) : "", sub.has(r.employee_id.trim().toLowerCase()) ? "Yes" : "No"]));
+  saveBlob(`AMH-staff-roster-${todayIso()}.csv`, new Blob(["﻿" + lines.join("\n")], { type: "text/csv" }));
+}
+function renderRoster() {
+  {
+    S.built = "roster";
+    const n = S.roster.length;
+    const q = h("input", { type: "search", id: "ro-q", placeholder: "Search name or employee ID", value: S.rq, oninput: e => { S.rq = e.target.value; fillRoster(); } });
+    const off = n ? armed(h("button", { class: "btn sm danger" }, "Remove everyone"), "Confirm: turn the check off", async () => {
+      try { await deleteRoster(S.roster.map(r => r.employee_id)); await reload("Roster cleared. Anyone with the link can now submit."); } catch (e) { toast(errText(e), "bad"); } }) : null;
+    const status = h("section", { class: "panel" }, h("div", { class: "panel-body", style: "display:flex;flex-direction:column;gap:10px" },
+      h("div", { class: "row" }, h("span", { class: "chip " + (n ? "ok" : "warn") }, n ? "Roster check is on" : "Roster check is off"),
+        h("span", { class: "grow" }, n ? `Only the ${n} employee ID${n === 1 ? "" : "s"} below can submit documents or sign job descriptions.` : "Anyone with the portal link can submit under any employee ID. Import your staff list to turn the check on."), off)));
+    const orphans = S.staff.filter(p => p.hasSubmitted && !p.onRoster);
+    if (n && orphans.length) {
+      const addAll = h("button", { class: "btn sm" }, `Add ${orphans.length === 1 ? "them" : "all " + orphans.length} to the roster`);
+      addAll.onclick = () => busy(addAll, async () => {
+        await saveRoster(orphans.map(p => ({ employee_id: p.employeeId, full_name: p.fullName || null, dept: p.dept || null, position: p.position || null })), false);
+        await reload("Added to the roster");
+      });
+      status.firstChild.append(h("div", { class: "row" }, h("span", { class: "chip warn" }, `${orphans.length} not on roster`),
+        h("span", { class: "grow muted" }, `${orphans.length === 1 ? "One person has" : orphans.length + " people have"} already submitted under an ID that isn't on the roster. They can't submit anything more until they're added.`), addAll));
+    }
+    setMain(
+      h("div", { class: "page-head" }, h("div", null, h("h1", null, "Staff roster"), h("p", { class: "muted" }, "The list of employee IDs allowed to submit. Staff not on it see “That employee ID isn't on the staff list” when they try. Everyone on it appears on the Compliance tab, including people who haven't submitted yet.")),
+        h("div", { class: "row" }, h("button", { class: "btn", onclick: rosterTemplate }, "CSV template"), n ? h("button", { class: "btn", onclick: rosterExport }, "Export roster") : null,
+          h("button", { class: "btn", onclick: () => rosterPersonModal() }, "Add person"), h("button", { class: "btn primary", onclick: rosterImportModal }, "Import CSV"))),
+      status,
+      h("section", { class: "panel" }, n ? h("div", { class: "filters" }, h("div", { class: "grow" }, q)) : null, h("div", { id: "rtbl" })));
+  }
+  fillRoster();
+}
+function fillRoster() {
+  const box = $("#rtbl"); if (!box) return;
+  if (!S.roster.length) { box.replaceChildren(h("div", { class: "empty" }, h("h3", null, "No one on the roster yet"), h("p", { class: "muted" }, "Export your staff list from HR as a CSV with the columns employee_id, full_name, dept and position, then click Import CSV. Use CSV template for an example."))); return; }
+  const sub = new Set(S.staff.filter(p => p.hasSubmitted).map(p => p.uid));
+  const q = S.rq.trim().toLowerCase();
+  const rows = S.roster.filter(r => !q || r.employee_id.toLowerCase().includes(q) || (r.full_name || "").toLowerCase().includes(q));
+  if (!rows.length) { box.replaceChildren(h("div", { class: "empty" }, h("p", { class: "muted" }, "Nobody matches this search."))); return; }
+  box.replaceChildren(h("div", { class: "tbl" }, h("table", null,
+    h("thead", null, h("tr", null, ["Staff member", "Department · position", "Submitted", ""].map(t => h("th", null, t)))),
+    h("tbody", null, rows.map(r => {
+      const rm = armed(h("button", { class: "btn sm danger" }, "Remove"), "Confirm remove", async () => { try { await deleteRoster([r.employee_id]); await reload(`${r.employee_id} removed from the roster`); } catch (e) { toast(errText(e), "bad"); } });
+      return h("tr", null,
+        h("td", null, h("div", { style: "font-weight:600" }, r.full_name || "—"), h("div", { class: "sub num" }, r.employee_id)),
+        h("td", null, h("div", null, r.dept ? deptName(r.dept) : "—"), h("div", { class: "sub" }, r.position || "")),
+        h("td", null, sub.has(r.employee_id.trim().toLowerCase()) ? h("span", { class: "chip ok" }, "Yes") : h("span", { class: "chip neutral" }, "Not yet")),
+        h("td", null, h("div", { class: "acts" }, h("button", { class: "btn sm", onclick: () => rosterPersonModal(r) }, "Edit"), rm)));
+    })))));
+}
+function rosterPersonModal(r) {
+  const m = M();
+  const id = h("input", { type: "text", id: "ro-id", value: r ? r.employee_id : "", disabled: !!r, autocomplete: "off" });
+  const name = h("input", { type: "text", id: "ro-name", value: r ? r.full_name || "" : "" });
+  const dept = h("select", { id: "ro-dept" }, h("option", { value: "" }, "Not set"), m.departments.map(d => h("option", { value: d.id }, d.name)));
+  const pos = h("select", { id: "ro-pos" }, h("option", { value: "" }, "Not set"), m.positions.map(x => h("option", { value: x }, x)));
+  dept.value = r && r.dept || ""; pos.value = r && r.position || "";
+  const err = h("p", { class: "err", hidden: true });
+  const go = h("button", { class: "btn primary" }, r ? "Save" : "Add to roster");
+  go.onclick = () => busy(go, async () => {
+    const eid = id.value.trim();
+    if (!eid) { err.textContent = "Enter the employee ID."; err.hidden = false; return; }
+    if (eid.length > 40) { err.textContent = "That employee ID is too long."; err.hidden = false; return; }
+    const same = S.roster.find(x => x.employee_id.toLowerCase() === eid.toLowerCase());
+    if (!r && same) { err.textContent = `${same.employee_id} is already on the roster${same.full_name ? " (" + same.full_name + ")" : ""}.`; err.hidden = false; return; }
+    must(await sb.from("roster").upsert({ employee_id: r ? r.employee_id : eid, full_name: name.value.trim() || null, dept: dept.value || null, position: pos.value || null }, { onConflict: "employee_id" }));
+    closeModal(); await reload(r ? "Saved" : `${eid} added to the roster`);
+  });
+  openModal({ title: r ? "Edit roster entry" : "Add person to roster", sub: r ? "To change an employee ID, remove this entry and add a new one." : "This person will be able to submit straight away.",
+    body: [h("div", { class: "grid2" }, h("label", { class: "f", for: "ro-id" }, h("span", { class: "req" }, "Employee ID"), id), h("label", { class: "f", for: "ro-name" }, "Full name", name),
+      h("label", { class: "f", for: "ro-dept" }, "Department", dept), h("label", { class: "f", for: "ro-pos" }, "Position", pos)),
+      h("p", { class: "hint" }, "Department and position on the roster take priority over what the person selects on the form, so their requirements always follow the roster."), err],
+    foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go] });
+}
+function rosterImportModal() {
+  const file = h("input", { type: "file", id: "ro-file", accept: ".csv,text/csv" });
+  const merge = h("input", { type: "radio", name: "ro-mode", value: "merge", checked: true });
+  const repl = h("input", { type: "radio", name: "ro-mode", value: "replace" });
+  const summary = h("div", { style: "display:flex;flex-direction:column;gap:8px" });
+  const go = h("button", { class: "btn primary", disabled: true }, "Import");
+  let parsed = null;
+  const show = () => {
+    if (!parsed) { summary.replaceChildren(); go.disabled = true; return; }
+    const { out, notes } = parsed;
+    const ex = new Map(S.roster.map(r => [r.employee_id.toLowerCase(), r]));
+    const fresh = out.filter(r => !ex.has(r.employee_id.toLowerCase())).length;
+    const keep = new Set(out.map(r => r.employee_id.toLowerCase()));
+    const gone = repl.checked ? S.roster.filter(r => !keep.has(r.employee_id.toLowerCase())).length : 0;
+    const parts = [`${out.length} ${out.length === 1 ? "person" : "people"} in the file`, `${fresh} new`, `${out.length - fresh} already on the roster (details updated)`];
+    if (gone) parts.push(`${gone} removed because they aren't in the file`);
+    summary.replaceChildren(h("p", null, h("strong", null, parts.join(" · "))),
+      notes.length ? h("div", { class: "notice" }, h("p", { class: "hint" }, `${notes.length} note${notes.length === 1 ? "" : "s"}:`), h("ul", { class: "done-list" }, notes.slice(0, 12).map(t => h("li", null, t))), notes.length > 12 ? h("p", { class: "hint" }, `…and ${notes.length - 12} more.`) : null) : null);
+    go.disabled = !out.length;
+    go.textContent = out.length ? `Import ${out.length}` : "Import";
+  };
+  file.onchange = async () => {
+    parsed = null; show();
+    const f = file.files[0]; if (!f) return;
+    if (/\.xlsx?$/i.test(f.name)) { summary.replaceChildren(h("p", { class: "err" }, "That's an Excel file. In Excel use File → Save As → CSV UTF-8, then choose the .csv file.")); return; }
+    try { parsed = readRoster(parseCsv(await f.text())); } catch (e) { summary.replaceChildren(h("p", { class: "err" }, "The file couldn't be read. " + errText(e))); return; }
+    show();
+  };
+  merge.onchange = show; repl.onchange = show;
+  go.onclick = () => busy(go, async () => {
+    await saveRoster(parsed.out, repl.checked);
+    closeModal(); await reload(`Roster imported: ${parsed.out.length} ${parsed.out.length === 1 ? "person" : "people"}`);
+  });
+  openModal({ title: "Import staff roster", sub: "A CSV with the columns employee_id, full_name, dept and position. Department can be the name or the code.",
+    body: [h("div", { class: "drop" }, file, h("span", { class: "hint" }, "Save from Excel as “CSV UTF-8”. Only the employee ID column is required.")),
+      h("div", { class: "f" }, h("span", null, "How to import"), h("div", { class: "checks", style: "flex-direction:column;align-items:flex-start" },
+        h("label", { class: "check" }, merge, "Add new people and update existing ones"),
+        h("label", { class: "check" }, repl, "Replace the roster: remove anyone who isn't in this file"))),
+      summary],
+    foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go], wide: true });
 }
 
 /* ---------- admin: job descriptions ---------- */
