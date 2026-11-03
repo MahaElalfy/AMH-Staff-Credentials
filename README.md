@@ -50,6 +50,11 @@ Do this in the portal: sign in as admin and open the **Staff roster** tab.
 5. Use **Add person**, **Edit** and **Remove** for single changes, and **Export roster** to download the list with who has submitted. **Remove everyone** turns the check off again.
 6. If people submitted before you imported the roster, the tab offers to add them in one click.
 
+### 6b. Load the job description library
+1. Sign in as admin, open **Job descriptions** and click **Import JD library**.
+2. Choose `AMH-JD-Library-import.json` (110 job descriptions as AMH-formatted PDFs) and click **Import**. Keep the page open until it finishes.
+3. Staff then pick their **Job title** on the form and are asked to sign that job description. Job descriptions already in the portal (same code) are skipped, so the import is safe to run again.
+
 ### 7. Test before sending to staff
 1. Open the portal. Enter a test employee ID, name, department and position, upload one certificate, and click **I'm finished**.
 2. Click **Admin sign in** and sign in. The submission should be in the **Review queue**. Open it and verify it.

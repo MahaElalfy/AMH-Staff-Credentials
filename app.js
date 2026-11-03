@@ -86,7 +86,17 @@ function requiredFor(p, m = M()) {
   }
   return (m.credentials || []).filter(c => ids.has(c.id));
 }
-const jdsFor = p => p ? S.jds.filter(j => !j.archived && (j.dept === "*" || j.dept === p.dept) && (!j.positions || !j.positions.length || j.positions.includes(p.position))) : [];
+// Library job descriptions (dept TITLE_JD) are chosen by job title on the form; the others match by department and position.
+const TITLE_JD = "@title";
+const titleJds = () => S.jds.filter(j => !j.archived && j.dept === TITLE_JD);
+function jdsFor(p) {
+  if (!p) return [];
+  const act = S.jds.filter(j => !j.archived);
+  const own = p.jobCode ? act.filter(j => j.dept === TITLE_JD && j.code === p.jobCode) : [];
+  if (own.length) return own;
+  return act.filter(j => j.dept !== TITLE_JD && (j.dept === "*" || j.dept === p.dept) && (!j.positions || !j.positions.length || j.positions.includes(p.position)));
+}
+const jobTitle = code => { const j = code && S.jds.find(x => x.dept === TITLE_JD && x.code === code); return j ? j.title : ""; };
 function evalCred(c, item) {
   if (!item) return { k: "missing", label: "Not submitted" };
   const exp = item.expiryDate || null, d = exp ? daysUntil(exp) : null;
@@ -128,15 +138,15 @@ async function fetchAll(table) {
 async function loadPublic() {
   const [m, jds] = await Promise.all([sb.from("settings").select("value").eq("key", "matrix").maybeSingle(), fetchAll("job_descriptions")]);
   S.matrix = must(m) ? m.data.value : null;
-  S.jds = jds.map(j => ({ id: j.id, title: j.title, code: j.code, dept: j.dept, positions: j.positions || [], path: j.file_path, fileName: j.file_name, version: j.version, archived: j.archived, history: j.history || [], updatedAt: j.updated_at }));
+  S.jds = jds.map(j => ({ id: j.id, title: j.title, code: j.code, dept: j.dept, positions: j.positions || [], path: j.file_path, fileName: j.file_name, version: j.version, archived: j.archived, category: j.category || "", history: j.history || [], updatedAt: j.updated_at }));
 }
 async function refresh() {
   await loadPublic();
   if (S.isAdmin) {
     const [subs, sigs, roster] = await Promise.all([fetchAll("current_submissions"), fetchAll("jd_signatures"), fetchAll("roster")]);
     const by = {};
-    const person = (eid) => { const k = eid.trim().toLowerCase(); return by[k] || (by[k] = { uid: k, employeeId: eid.trim(), fullName: "", dept: "", position: "", mobile: "", updatedAt: "", creds: {}, signatures: {}, onRoster: false, hasSubmitted: false }); };
-    const touchPerson = (u, r, ts) => { u.hasSubmitted = true; if (!u.updatedAt || ts > u.updatedAt) { u.updatedAt = ts; if (!u.onRoster || !u.fullName) u.fullName = r.full_name; if (!u.onRoster || !u.dept) { u.dept = r.dept; u.position = r.position; } if (r.mobile) u.mobile = r.mobile; } };
+    const person = (eid) => { const k = eid.trim().toLowerCase(); return by[k] || (by[k] = { uid: k, employeeId: eid.trim(), fullName: "", dept: "", position: "", mobile: "", jobCode: "", updatedAt: "", creds: {}, signatures: {}, onRoster: false, hasSubmitted: false }); };
+    const touchPerson = (u, r, ts) => { u.hasSubmitted = true; if (!u.updatedAt || ts > u.updatedAt) { u.updatedAt = ts; if (!u.onRoster || !u.fullName) u.fullName = r.full_name; if (!u.onRoster || !u.dept) { u.dept = r.dept; u.position = r.position; } if (r.mobile) u.mobile = r.mobile; if (r.job_code) u.jobCode = r.job_code; } };
     for (const r of roster) { const u = person(r.employee_id); u.onRoster = true; u.fullName = r.full_name || ""; u.dept = r.dept || ""; u.position = r.position || ""; }
     for (const r of subs) { const u = person(r.employee_id);
       u.creds[r.cred_id] = { id: r.id, number: r.number, classification: r.classification, specialty: r.specialty, issueDate: r.issue_date, expiryDate: r.expiry_date, path: r.file_path, fileName: r.file_name, fileType: r.file_type, uploadedAt: r.uploaded_at, status: r.status, note: r.review_note, asName: r.full_name };
@@ -289,7 +299,7 @@ function renderStaff() {
   if (!S.person) return setMain(head, ann, detailsPanel());
   const p = S.person;
   const who = h("div", { class: "panel profile" },
-    pf("Name", p.fullName), pf("Employee ID", p.employeeId), pf("Department", deptName(p.dept)), pf("Position", p.position),
+    pf("Name", p.fullName), pf("Employee ID", p.employeeId), pf("Department", deptName(p.dept)), pf("Position", p.position), jobTitle(p.jobCode) ? pf("Job title", jobTitle(p.jobCode)) : null,
     h("button", { class: "btn sm", onclick: () => { S.person = null; render(); } }, "Change details"));
   const req = requiredFor(p);
   const list = h("div", { class: "list" });
@@ -333,6 +343,15 @@ function detailsPanel() {
     position: h("select", { id: "pf-pos" }, h("option", { value: "" }, "Choose position"), m.positions.map(x => h("option", { value: x }, x))),
     mobile: h("input", { type: "tel", id: "pf-mob", value: p.mobile || "", placeholder: "05x xxx xxxx" })
   };
+  const lib = titleJds();
+  if (lib.length) {
+    const groups = {};
+    for (const j of lib) (groups[j.category || "Other"] = groups[j.category || "Other"] || []).push(j);
+    f.jobCode = h("select", { id: "pf-job" }, h("option", { value: "" }, "Choose your job title"),
+      Object.keys(groups).sort().map(g => h("optgroup", { label: g }, groups[g].sort((a, b) => a.title.localeCompare(b.title)).map(j => h("option", { value: j.code }, j.title)))),
+      h("option", { value: "-" }, "My job title isn't listed"));
+    f.jobCode.value = p.jobCode || (p.employeeId ? "-" : "");
+  }
   f.dept.value = p.dept || ""; f.position.value = p.position || "";
   const err = h("p", { class: "err", hidden: true });
   const preview = h("p", { class: "hint" });
@@ -341,7 +360,8 @@ function detailsPanel() {
   const go = h("button", { class: "btn primary" }, "Continue to uploads");
   go.onclick = () => busy(go, async () => {
     const v = Object.fromEntries(Object.entries(f).map(([k, el]) => [k, el.value.trim()]));
-    const missing = [!v.employeeId && "employee ID", !v.fullName && "full name", !v.dept && "department", !v.position && "position"].filter(Boolean);
+    const missing = [!v.employeeId && "employee ID", !v.fullName && "full name", !v.dept && "department", !v.position && "position", f.jobCode && !v.jobCode && "job title"].filter(Boolean);
+    if (v.jobCode === "-") v.jobCode = "";
     if (missing.length) { err.textContent = "Enter your " + missing.join(", ") + "."; err.hidden = false; return; }
     if (v.fullName.length < 2) { err.textContent = "Enter your full name."; err.hidden = false; return; }
     const ok = await sb.rpc("employee_ok", { eid: v.employeeId });
@@ -356,6 +376,7 @@ function detailsPanel() {
         h("label", { class: "f", for: "pf-name" }, h("span", { class: "req" }, "Full name"), f.fullName),
         h("label", { class: "f", for: "pf-dept" }, h("span", { class: "req" }, "Department"), f.dept),
         h("label", { class: "f", for: "pf-pos" }, h("span", { class: "req" }, "Position"), f.position),
+        f.jobCode ? h("label", { class: "f full", for: "pf-job" }, h("span", { class: "req" }, "Job title"), f.jobCode, h("span", { class: "hint" }, "You'll be asked to read and sign the job description for this title.")) : null,
         h("label", { class: "f full", for: "pf-mob" }, "Mobile (optional)", f.mobile)),
       preview, err, h("div", { class: "row" }, go)));
 }
@@ -369,7 +390,13 @@ function finishedPanel() {
     h("div", { class: "row" }, h("button", { class: "btn", onclick: () => { S.finished = false; render(); } }, "Add more documents"),
       h("button", { class: "btn ghost", onclick: () => { S.finished = false; S.person = null; S.lastPerson = null; S.sent = {}; S.signed = {}; render(); } }, "Start over for someone else")));
 }
-const personFields = () => ({ employee_id: S.person.employeeId, full_name: S.person.fullName, dept: S.person.dept, position: S.person.position });
+const personFields = () => ({ employee_id: S.person.employeeId, full_name: S.person.fullName, dept: S.person.dept, position: S.person.position, job_code: S.person.jobCode || null });
+// Inserts a staff record. If the database hasn't been updated with the job_code column yet, retries without it so submissions still go through.
+async function insertRow(table, row) {
+  let res = await sb.from(table).insert(row);
+  if (res.error && /job_code/.test(res.error.message || "")) { const { job_code, ...rest } = row; res = await sb.from(table).insert(rest); }
+  must(res);
+}
 const incomingDir = () => `incoming/${safeSeg(S.person.employeeId)}`;
 
 function credModal(c) {
@@ -401,7 +428,7 @@ function credModal(c) {
     let prep; try { prep = await prepareFile(file.files[0]); } catch (e) { return fail(e.message); }
     const path = await uploadTo("credentials", `${incomingDir()}/${c.id}-${rid()}.${prep.ext}`, prep.blob, prep.type);
     const rec = { cred_id: c.id, number: num.value.trim() || null, classification: isScfhs ? cls.value : null, specialty: isScfhs ? spec.value.trim() : null, issue_date: issue.value, expiry_date: exp.value || null, file_path: path, file_name: prep.name, file_type: prep.type, file_size: prep.blob.size };
-    must(await sb.from("submissions").insert({ ...personFields(), mobile: S.person.mobile || null, ...rec }));
+    await insertRow("submissions", { ...personFields(), mobile: S.person.mobile || null, ...rec });
     S.sent[c.id] = { number: rec.number, classification: rec.classification, specialty: rec.specialty, issueDate: rec.issue_date, expiryDate: rec.expiry_date, fileName: rec.file_name };
     closeModal(); render(); toast(`${c.short} submitted`);
   });
@@ -444,7 +471,7 @@ function signModal(j) {
     if (!typed.value.trim()) return fail("Type your full name.");
     if (!pad.has()) return fail("Draw your signature in the box.");
     const path = await uploadTo("credentials", `${incomingDir()}/signature-${j.id}-v${j.version}-${rid()}.png`, await pad.blob(), "image/png");
-    must(await sb.from("jd_signatures").insert({ ...personFields(), jd_id: j.id, version: j.version, typed_name: typed.value.trim(), signature_path: path }));
+    await insertRow("jd_signatures", { ...personFields(), jd_id: j.id, version: j.version, typed_name: typed.value.trim(), signature_path: path });
     S.signed[j.id] = true;
     closeModal(); render(); toast("Job description signed");
   });
@@ -514,7 +541,7 @@ function fillCompliance() {
     h("thead", null, h("tr", null, ["Staff member", "Department · position", "Credentials", "Job description", "Status", "Last submitted"].map(t => h("th", null, t)))),
     h("tbody", null, rows.map(({ p, s }) => h("tr", { class: "click", tabindex: "0", onclick: () => staffDetail(p.uid), onkeydown: e => { if (e.key === "Enter") staffDetail(p.uid); } },
       h("td", null, h("div", { style: "font-weight:600" }, p.fullName || "—"), h("div", { class: "sub num" }, p.employeeId)),
-      h("td", null, h("div", null, deptName(p.dept)), h("div", { class: "sub" }, p.position), p.creds.scfhs && p.creds.scfhs.classification ? h("div", { class: "sub" }, "SCFHS: " + p.creds.scfhs.classification) : null),
+      h("td", null, h("div", null, deptName(p.dept)), h("div", { class: "sub" }, p.position), jobTitle(p.jobCode) ? h("div", { class: "sub" }, jobTitle(p.jobCode)) : null, p.creds.scfhs && p.creds.scfhs.classification ? h("div", { class: "sub" }, "SCFHS: " + p.creds.scfhs.classification) : null),
       h("td", null, s.rows.length ? s.rows.map(r => h("span", { class: "mini " + TONE[r.k], title: `${r.c.name}: ${r.label}${r.exp ? " (expires " + fmtDate(r.exp) + ")" : ""}` }, r.c.short)) : h("span", { class: "sub" }, "None set")),
       h("td", { class: "num" }, s.jds.length ? h("span", { class: "chip " + (s.jdOut ? "warn" : "ok") }, `${s.jds.length - s.jdOut}/${s.jds.length} signed`) : h("span", { class: "sub" }, "—")),
       h("td", null, h("span", { class: "chip " + s.overall.k }, s.overall.label)),
@@ -522,10 +549,10 @@ function fillCompliance() {
 }
 function exportCsv() {
   const esc = v => { const s = String(v == null ? "" : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const lines = [["Employee ID", "Full name", "Department", "Position", "Mobile", "SCFHS no.", "SCFHS classification", "SCFHS specialty", "Requirement", "Status", "Certificate no.", "Issue date", "Expiry date", "Submitted"].join(",")];
+  const lines = [["Employee ID", "Full name", "Department", "Position", "Job title", "Mobile", "SCFHS no.", "SCFHS classification", "SCFHS specialty", "Requirement", "Status", "Certificate no.", "Issue date", "Expiry date", "Submitted"].join(",")];
   for (const p of S.staff) {
     const s = summarize(p), sc = p.creds.scfhs || {};
-    const who = [p.employeeId, p.fullName, deptName(p.dept), p.position, p.mobile, sc.number, sc.classification, sc.specialty];
+    const who = [p.employeeId, p.fullName, deptName(p.dept), p.position, jobTitle(p.jobCode), p.mobile, sc.number, sc.classification, sc.specialty];
     for (const r of s.rows) lines.push([...who, r.c.short, r.label, r.item && r.item.number, r.item && r.item.issueDate, r.exp, r.item && r.item.uploadedAt && r.item.uploadedAt.slice(0, 10)].map(esc).join(","));
     for (const x of s.jds) lines.push([...who, "JD: " + x.j.title + " v" + x.j.version, x.signed ? "Signed" : "Not signed", "", "", "", x.sig && x.sig.signedAt && x.sig.signedAt.slice(0, 10)].map(esc).join(","));
   }
@@ -570,7 +597,7 @@ function staffDetail(uid) {
     h("div", { class: "acts" }, x.sig ? h("button", { class: "btn sm ghost", onclick: () => viewStaffFile(x.sig, "Signature: " + x.j.title) }, "Signature") : null)));
   if (!s.jds.length) jl.append(h("div", { class: "empty" }, h("p", { class: "muted" }, "No job description applies to this position.")));
   openModal({
-    title: p.fullName || "Staff member", sub: `${deptName(p.dept)} · ${p.position || "—"} · Employee ID ${p.employeeId}`, wide: true,
+    title: p.fullName || "Staff member", sub: [deptName(p.dept), p.position || "—", jobTitle(p.jobCode), "Employee ID " + p.employeeId].filter(Boolean).join(" · "), wide: true,
     body: [h("div", { class: "row" }, h("span", { class: "chip " + s.overall.k }, s.overall.label), p.mobile ? h("span", { class: "muted num" }, p.mobile) : null, p.onRoster ? h("span", { class: "muted" }, "On staff roster") : null),
       h("h3", null, "Credentials"), list, h("h3", null, "Job description"), jl],
     foot: [h("button", { class: "btn primary", onclick: closeModal }, "Done")]
@@ -777,14 +804,18 @@ function rosterImportModal() {
 }
 
 /* ---------- admin: job descriptions ---------- */
-function audienceText(j) { return `${deptName(j.dept)} · ${j.positions && j.positions.length ? j.positions.join(", ") : "all positions"}`; }
+function audienceText(j) { if (j.dept === TITLE_JD) return `${j.category ? j.category + " · " : ""}staff who choose this job title`; return `${deptName(j.dept)} · ${j.positions && j.positions.length ? j.positions.join(", ") : "all positions"}`; }
 function renderJds() {
   S.built = "jds";
-  const head = h("div", { class: "page-head" }, h("div", null, h("h1", null, "Job descriptions"), h("p", { class: "muted" }, "Upload a job description as a PDF and choose who it applies to. Staff in that department and position are asked to read and sign it when they submit. Replacing the file issues a new version that everyone signs again.")),
-    h("button", { class: "btn primary", onclick: () => jdModal() }, "Upload job description"));
-  const active = S.jds.filter(j => !j.archived).sort((a, b) => a.title.localeCompare(b.title));
-  if (!active.length) return setMain(head, notice("No job descriptions issued", "Upload the first job description, for example the Emergency Medicine Consultant JD, and assign it to that department and position."));
+  const head = h("div", { class: "page-head" }, h("div", null, h("h1", null, "Job descriptions"), h("p", { class: "muted" }, "Library job descriptions are chosen by staff through the Job title field on the form; others apply to a department and position. Staff read and sign the one that applies to them. A new version must be signed again.")),
+    h("div", { class: "row" }, h("button", { class: "btn", onclick: jdImportModal }, "Import JD library"), h("button", { class: "btn primary", onclick: () => jdModal() }, "Upload job description")));
+  const all = S.jds.filter(j => !j.archived).sort((a, b) => (a.code || "~").localeCompare(b.code || "~") || a.title.localeCompare(b.title));
+  if (!all.length) return setMain(head, notice("No job descriptions issued", "Click Import JD library to load the AMH job description library in one step, or upload a single job description and assign it to a department and position."));
+  const q = (S.jq || "").trim().toLowerCase();
+  const active = all.filter(j => !q || [j.title, j.code, j.category].some(x => (x || "").toLowerCase().includes(q)));
+  const search = h("input", { type: "search", id: "jd-q", placeholder: "Search title, code or department", value: S.jq || "", oninput: e => { S.jq = e.target.value; const pos = e.target.selectionStart; renderJds(); const n = $("#jd-q"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } } });
   const list = h("div", { class: "list" });
+  if (!active.length) list.append(h("div", { class: "empty" }, h("p", { class: "muted" }, "No job descriptions match this search.")));
   for (const j of active) {
     const people = S.staff.filter(p => jdsFor(p).some(x => x.id === j.id));
     const signed = people.filter(p => p.signatures[j.id] && p.signatures[j.id].version === j.version).length;
@@ -797,7 +828,43 @@ function renderJds() {
         h("button", { class: "btn sm", onclick: () => jdSignatures(j) }, "Signatures"),
         h("button", { class: "btn sm", onclick: () => jdModal(j) }, "New version"), arch)));
   }
-  setMain(head, h("section", { class: "panel" }, list));
+  setMain(head, h("section", { class: "panel" }, h("div", { class: "filters" }, h("div", { class: "grow" }, search), h("span", { class: "muted" }, `${active.length} of ${all.length}`)), list));
+}
+function b64Blob(b64, type) { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type }); }
+function jdImportModal() {
+  const file = h("input", { type: "file", id: "jdi-file", accept: ".json,application/json" });
+  const summary = h("div", { style: "display:flex;flex-direction:column;gap:8px" });
+  const go = h("button", { class: "btn primary", disabled: true }, "Import");
+  let todo = [];
+  file.onchange = async () => {
+    todo = []; go.disabled = true; summary.replaceChildren();
+    const f = file.files[0]; if (!f) return;
+    let lib;
+    try { lib = JSON.parse(await f.text()); } catch (e) { summary.append(h("p", { class: "err" }, "That file couldn't be read. Choose the AMH-JD-Library-import.json file.")); return; }
+    if (!lib || lib.format !== "amh-jd-library" || !Array.isArray(lib.items)) { summary.append(h("p", { class: "err" }, "That isn't a job description library file. Choose AMH-JD-Library-import.json.")); return; }
+    const have = new Set(S.jds.filter(j => !j.archived && j.code).map(j => j.code.toLowerCase()));
+    todo = lib.items.filter(x => x.code && x.title && x.pdf && !have.has(x.code.toLowerCase()));
+    const skip = lib.items.length - todo.length;
+    summary.append(h("p", null, h("strong", null, `${lib.items.length} job descriptions in the file · ${todo.length} to import${skip ? ` · ${skip} already in the portal (skipped)` : ""}`)),
+      h("p", { class: "hint" }, "Each one is issued as version 1. Staff choose their job title on the form and are asked to sign that job description."));
+    go.disabled = !todo.length; go.textContent = todo.length ? `Import ${todo.length}` : "Nothing new to import";
+  };
+  go.onclick = () => busy(go, async () => {
+    let done = 0;
+    const bar = h("p", { class: "hint", role: "status" });
+    summary.append(bar);
+    for (const x of todo) {
+      bar.textContent = `Uploading ${done + 1} of ${todo.length}: ${x.title}…`;
+      const path = await uploadTo("jds", `${rid()}.pdf`, b64Blob(x.pdf, "application/pdf"), "application/pdf");
+      const res = await sb.from("job_descriptions").insert({ title: x.title, code: x.code, category: x.category || null, dept: TITLE_JD, positions: [], file_path: path, file_name: x.file_name || x.code + ".pdf", version: 1 });
+      if (res.error && /category/.test(res.error.message || "")) throw new Error("The database needs updating first: run supabase/schema.sql again in the Supabase SQL Editor, then import again. Nothing already imported will be duplicated.");
+      must(res); done++;
+    }
+    closeModal(); await reload(`${done} job descriptions imported`);
+  });
+  openModal({ title: "Import job description library", sub: "Loads every job description from the AMH library file in one step.",
+    body: [h("div", { class: "drop" }, file, h("span", { class: "hint" }, "Choose AMH-JD-Library-import.json. Job descriptions already in the portal (same code) are skipped, so it's safe to run again.")), summary],
+    foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go], wide: true });
 }
 function jdModal(j) {
   const m = M();
@@ -818,7 +885,8 @@ function jdModal(j) {
     if (f.size > 20 * 1048576) return fail("The PDF must be under 20 MB.");
     const path = await uploadTo("jds", `${rid()}.pdf`, f, "application/pdf");
     const now = new Date().toISOString();
-    const body = { title: title.value.trim(), code: code.value.trim() || null, dept: dept.value, positions: pos.filter(p => p.cb.checked).map(p => p.x), file_path: path, file_name: f.name, updated_at: now };
+    const lib = j && j.dept === TITLE_JD;
+    const body = { title: title.value.trim(), code: code.value.trim() || null, dept: lib ? TITLE_JD : dept.value, positions: lib ? [] : pos.filter(p => p.cb.checked).map(p => p.x), file_path: path, file_name: f.name, updated_at: now };
     if (j) {
       const hist = (j.history || []).concat([{ version: j.version, file_path: j.path, file_name: j.fileName, issued_at: j.updatedAt }]);
       must(await sb.from("job_descriptions").update({ ...body, version: j.version + 1, history: hist }).eq("id", j.id));
@@ -827,8 +895,8 @@ function jdModal(j) {
   });
   openModal({
     title: j ? "New version of " + j.title : "Upload job description", sub: j ? `Staff who signed version ${j.version} will be asked to sign again.` : "Staff matching the department and positions below will be asked to sign it.",
-    body: [h("div", { class: "grid2" }, h("label", { class: "f full", for: "jd-title" }, "Title", title), h("label", { class: "f", for: "jd-code" }, "Document code", code), h("label", { class: "f", for: "jd-dept" }, "Department", dept)),
-      h("div", { class: "f" }, h("span", null, "Positions"), h("div", { class: "checks" }, pos.map(p => p.el)), h("span", { class: "hint" }, "Leave all unticked to include every position in the department.")),
+    body: [h("div", { class: "grid2" }, h("label", { class: "f full", for: "jd-title" }, "Title", title), h("label", { class: "f", for: "jd-code" }, "Document code", code), j && j.dept === TITLE_JD ? null : h("label", { class: "f", for: "jd-dept" }, "Department", dept)),
+      j && j.dept === TITLE_JD ? h("p", { class: "hint" }, "Staff who chose this job title will be asked to sign the new version.") : h("div", { class: "f" }, h("span", null, "Positions"), h("div", { class: "checks" }, pos.map(p => p.el)), h("span", { class: "hint" }, "Leave all unticked to include every position in the department.")),
       h("div", { class: "drop" }, file, h("span", { class: "hint" }, "PDF, up to 20 MB.")), err],
     foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go]
   });

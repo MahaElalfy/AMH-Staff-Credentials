@@ -84,6 +84,8 @@ create table if not exists public.submissions (
   reviewed_at timestamptz,
   reviewed_by text
 );
+-- Job title chosen on the form (code of a library job description, e.g. JD-HRM-016). Safe to re-run.
+alter table public.submissions add column if not exists job_code text;
 create index if not exists submissions_emp_cred on public.submissions (employee_id, cred_id, uploaded_at desc);
 alter table public.submissions enable row level security;
 drop policy if exists "submission insert" on public.submissions;
@@ -117,6 +119,8 @@ create table if not exists public.job_descriptions (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+-- Department label for library job descriptions (dept = '@title' means staff pick it by job title). Safe to re-run.
+alter table public.job_descriptions add column if not exists category text;
 alter table public.job_descriptions enable row level security;
 drop policy if exists "jd read" on public.job_descriptions;
 drop policy if exists "jd write" on public.job_descriptions;
@@ -135,6 +139,7 @@ create table if not exists public.jd_signatures (
   signature_path text not null,
   signed_at timestamptz not null default now()
 );
+alter table public.jd_signatures add column if not exists job_code text;
 alter table public.jd_signatures enable row level security;
 drop policy if exists "signature insert" on public.jd_signatures;
 drop policy if exists "signature admin read" on public.jd_signatures;
