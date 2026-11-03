@@ -6,7 +6,7 @@ Instructions for Claude (or a person) on a computer that can reach GitHub. Unzip
 - The portal is complete: static site (`index.html`, `app.js`, `config.js`, `logo.png`) plus a Supabase backend (`supabase/schema.sql`). `README.md` explains the design.
 - The git history is included (`.git`). The remote is already set to `https://github.com/MahaElalfy/AMH-Staff-Credentials.git` (branch `main`).
 - Supabase project: `https://bufxfiahaqkchfeozbbi.supabase.co` (already in `config.js`).
-- **Still missing:** the Supabase anon / publishable key in `config.js` (`supabaseAnonKey`).
+- Supabase publishable key is set in `config.js`.
 
 ## Steps
 1. **Anon key.** Ask the user for the Supabase **anon** or **publishable** key: Dashboard → Project Settings → API Keys, or https://supabase.com/dashboard/project/bufxfiahaqkchfeozbbi/settings/api-keys. Put it in `config.js` as `supabaseAnonKey`. Never accept or commit the `service_role` / secret key. Commit the change.
