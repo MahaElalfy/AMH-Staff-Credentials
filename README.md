@@ -6,7 +6,7 @@ AlMather Hospital staff open the portal link (no sign-in, no emails), enter thei
 - **Data and files:** Supabase (database and private file storage).
 - **Access rules:** enforced by the database (`supabase/schema.sql`), not just the page:
   - Anyone with the link can **submit** documents and signatures, but **cannot read anything back**, not even their own.
-  - Only the admin email in `public.admins` can sign in to view, verify, export, upload job descriptions and change requirements.
+  - Only admins and the HR manager (Users & roles tab) can view, verify, export, upload job descriptions and change requirements. Department heads and directors can only see and sign job descriptions routed to them.
   - Optional **staff roster**: once you import one, only listed employee IDs can submit, and the Compliance view also shows who hasn't submitted yet.
 
 > Because staff don't sign in, anyone who has the link can submit under any employee ID. The admin review (checking each document against the primary source) and the optional roster are the safeguards. Share the link only internally.
@@ -34,6 +34,17 @@ AlMather Hospital staff open the portal link (no sign-in, no emails), enter thei
 1. In **Authentication → Sign In / Providers**, turn **on** "Allow new users to sign up", and under **Email** turn **off** "Confirm email".
 2. This is safe: `schema.sql` blocks anyone whose email isn't on the portal's **Admins** tab from creating an account.
 3. To add an admin, sign in, open **Admins → Add admin**, then send them the message shown. They click **Admin sign in → First time? Set your password**.
+
+### 3c. Users, roles and job description sign-off
+Open **Users & roles** in the portal to add people. Each person has one role:
+| Role | Can do |
+|---|---|
+| Admin | Everything |
+| HR manager | Everything, plus the final signature on every job description (JD sign-off tab) |
+| Department head | Only signs the job descriptions of staff in the departments ticked for them |
+| Director | Only signs the job descriptions of department heads in the departments ticked (e.g. CMO, Nursing Director) |
+
+Each job description is signed in this order: **employee → department head → HR manager**. Staff who choose **Additional designation: Department Head** pick a second (department head) job title and sign both job descriptions; theirs go to the **director** instead of a department head. Make sure every department has a department head and a director assigned, or signatures will wait. The JD sign-off tab flags departments with nobody assigned.
 
 ### 4. Connect the page
 1. Open **Project Settings → API Keys** (on some projects it's under **Data API**).

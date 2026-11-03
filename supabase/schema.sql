@@ -12,37 +12,68 @@
 -- Administrator
 -- ---------------------------------------------------------------
 create table if not exists public.admins (email text primary key);
--- The only administrator. Change or add rows to grant admin access.
+-- The first administrator. Add others from the portal (Users & roles tab).
 insert into public.admins (email) values ('malelfy@kfshrc.edu.sa') on conflict do nothing;
+alter table public.admins add column if not exists added_at timestamptz default now();
+alter table public.admins add column if not exists added_by text;
+alter table public.admins add column if not exists full_name text;
+-- Roles: admin (full access), hr (full access + final job description sign-off),
+--        head (signs job descriptions for staff in their departments),
+--        director (signs job descriptions for department heads in their departments).
+alter table public.admins add column if not exists role text not null default 'admin';
+alter table public.admins add column if not exists depts text[] not null default '{}';
 
 create or replace function public.is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.admins where lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')));
+  select exists (select 1 from public.admins where lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')) and role in ('admin', 'hr'));
+$$;
+create or replace function public.is_hr() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.admins where lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')) and role = 'hr');
 $$;
 alter table public.admins enable row level security;
 drop policy if exists "admins visible to admin" on public.admins;
 create policy "admins visible to admin" on public.admins for select to authenticated using (public.is_admin());
-alter table public.admins add column if not exists added_at timestamptz default now();
-alter table public.admins add column if not exists added_by text;
 
--- Admin management from the portal (Admins tab). Each function checks the caller is an admin.
+-- The signed-in person's own account (role and departments), used by the portal after sign-in.
+drop function if exists public.my_account();
+create or replace function public.my_account() returns table (email text, full_name text, role text, depts text[])
+language sql stable security definer set search_path = public as $$
+  select email, full_name, role, depts from public.admins where lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''));
+$$;
+
+-- User management from the portal (Users & roles tab). Each function checks the caller is an admin.
+drop function if exists public.admin_list();
 create or replace function public.admin_list()
-returns table (email text, added_at timestamptz, added_by text, has_account boolean, last_sign_in_at timestamptz)
+returns table (email text, full_name text, role text, depts text[], added_at timestamptz, added_by text, has_account boolean, last_sign_in_at timestamptz)
 language plpgsql stable security definer set search_path = public, auth as $$
 begin
   if not public.is_admin() then raise exception 'not allowed'; end if;
   return query
-    select a.email, a.added_at, a.added_by, u.id is not null, u.last_sign_in_at
+    select a.email, a.full_name, a.role, a.depts, a.added_at, a.added_by, u.id is not null, u.last_sign_in_at
     from public.admins a left join auth.users u on lower(u.email) = lower(a.email)
     order by a.added_at nulls first, a.email;
 end $$;
 
-create or replace function public.admin_add(new_email text) returns void
+drop function if exists public.admin_add(text);
+create or replace function public.admin_add(new_email text, new_name text default null, new_role text default 'admin', new_depts text[] default '{}') returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if not public.is_admin() then raise exception 'not allowed'; end if;
   if new_email is null or new_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'invalid email'; end if;
-  insert into public.admins (email, added_by) values (lower(trim(new_email)), auth.jwt() ->> 'email') on conflict do nothing;
+  if new_role not in ('admin', 'hr', 'head', 'director') then raise exception 'invalid role'; end if;
+  insert into public.admins (email, full_name, role, depts, added_by)
+    values (lower(trim(new_email)), nullif(trim(new_name), ''), new_role, coalesce(new_depts, '{}'), auth.jwt() ->> 'email')
+    on conflict (email) do update set full_name = excluded.full_name, role = excluded.role, depts = excluded.depts;
+end $$;
+
+create or replace function public.admin_update(target text, new_name text, new_role text, new_depts text[]) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'not allowed'; end if;
+  if new_role not in ('admin', 'hr', 'head', 'director') then raise exception 'invalid role'; end if;
+  if lower(target) = lower(auth.jwt() ->> 'email') and new_role not in ('admin', 'hr') then raise exception 'You cannot remove your own admin access'; end if;
+  update public.admins set full_name = nullif(trim(new_name), ''), role = new_role, depts = coalesce(new_depts, '{}') where lower(email) = lower(target);
 end $$;
 
 -- Removes the person's login so they can set a new password from the sign-in screen.
@@ -51,7 +82,7 @@ language plpgsql security definer set search_path = public, auth as $$
 begin
   if not public.is_admin() then raise exception 'not allowed'; end if;
   if lower(target) = lower(auth.jwt() ->> 'email') then raise exception 'cannot reset yourself'; end if;
-  if not exists (select 1 from public.admins where lower(email) = lower(target)) then raise exception 'not an admin'; end if;
+  if not exists (select 1 from public.admins where lower(email) = lower(target)) then raise exception 'not a portal user'; end if;
   delete from auth.users where lower(email) = lower(target);
 end $$;
 
@@ -63,16 +94,16 @@ begin
   delete from public.admins where lower(email) = lower(target);
   delete from auth.users where lower(email) = lower(target);
 end $$;
-revoke execute on function public.admin_list(), public.admin_add(text), public.admin_reset(text), public.admin_remove(text) from public, anon;
-grant execute on function public.admin_list(), public.admin_add(text), public.admin_reset(text), public.admin_remove(text) to authenticated;
+revoke execute on function public.admin_list(), public.admin_add(text, text, text, text[]), public.admin_update(text, text, text, text[]), public.admin_reset(text), public.admin_remove(text) from public, anon;
+grant execute on function public.admin_list(), public.admin_add(text, text, text, text[]), public.admin_update(text, text, text, text[]), public.admin_reset(text), public.admin_remove(text) to authenticated;
 
--- Only invited admin emails can create a login ("First time? Set your password" in the portal).
+-- Only invited emails (any role) can create a login ("First time? Set your password" in the portal).
 -- Their account is confirmed straight away, so no email is needed.
 create or replace function public.only_invited_signups() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if not exists (select 1 from public.admins where lower(email) = lower(new.email)) then
-    raise exception 'This email has not been added as an admin';
+    raise exception 'This email has not been added to the portal';
   end if;
   new.email_confirmed_at := coalesce(new.email_confirmed_at, now());
   return new;
@@ -143,6 +174,8 @@ create table if not exists public.submissions (
 );
 -- Job title chosen on the form (code of a library job description, e.g. JD-HRM-016). Safe to re-run.
 alter table public.submissions add column if not exists job_code text;
+alter table public.submissions add column if not exists designation text;
+alter table public.submissions add column if not exists job_code2 text;
 create index if not exists submissions_emp_cred on public.submissions (employee_id, cred_id, uploaded_at desc);
 alter table public.submissions enable row level security;
 drop policy if exists "submission insert" on public.submissions;
@@ -197,12 +230,76 @@ create table if not exists public.jd_signatures (
   signed_at timestamptz not null default now()
 );
 alter table public.jd_signatures add column if not exists job_code text;
+alter table public.jd_signatures add column if not exists designation text;
+alter table public.jd_signatures add column if not exists job_code2 text;
+-- Approval chain: employee -> department head (or director, for a department head's own JDs) -> HR manager.
+alter table public.jd_signatures add column if not exists mgr_email text;
+alter table public.jd_signatures add column if not exists mgr_name text;
+alter table public.jd_signatures add column if not exists mgr_role text;
+alter table public.jd_signatures add column if not exists mgr_signature_path text;
+alter table public.jd_signatures add column if not exists mgr_signed_at timestamptz;
+alter table public.jd_signatures add column if not exists hr_email text;
+alter table public.jd_signatures add column if not exists hr_name text;
+alter table public.jd_signatures add column if not exists hr_signature_path text;
+alter table public.jd_signatures add column if not exists hr_signed_at timestamptz;
 alter table public.jd_signatures enable row level security;
 drop policy if exists "signature insert" on public.jd_signatures;
 drop policy if exists "signature admin read" on public.jd_signatures;
 create policy "signature insert" on public.jd_signatures for insert to anon, authenticated
-  with check (signature_path like 'incoming/%' and public.employee_ok(employee_id));
+  with check (signature_path like 'incoming/%' and public.employee_ok(employee_id)
+              and mgr_signed_at is null and mgr_signature_path is null and hr_signed_at is null and hr_signature_path is null);
 create policy "signature admin read" on public.jd_signatures for select to authenticated using (public.is_admin());
+
+-- True when the signed-in person is the manager who signs this signature:
+-- the department head for staff, or the director for department heads.
+create or replace function public.is_jd_manager(p_dept text, p_designation text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.admins a
+    where lower(a.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+      and a.role = case when p_designation = 'Department Head' then 'director' else 'head' end
+      and (p_dept = any(a.depts) or '*' = any(a.depts)));
+$$;
+
+-- Signatures the signed-in head or director can see (waiting for them, or already signed by them).
+create or replace function public.manager_queue() returns setof public.jd_signatures
+language sql stable security definer set search_path = public as $$
+  select * from public.jd_signatures s where public.is_jd_manager(s.dept, s.designation) order by s.signed_at;
+$$;
+
+create or replace function public.jd_manager_sign(sig uuid, signer_name text, sig_path text) returns void
+language plpgsql security definer set search_path = public as $$
+declare r public.jd_signatures; acct public.admins;
+begin
+  select * into r from public.jd_signatures where id = sig;
+  if not found then raise exception 'signature not found'; end if;
+  if not public.is_jd_manager(r.dept, r.designation) then raise exception 'You are not the manager for this signature'; end if;
+  if r.mgr_signed_at is not null then raise exception 'Already signed by the manager'; end if;
+  if sig_path not like 'incoming/%' or coalesce(trim(signer_name), '') = '' then raise exception 'signature missing'; end if;
+  select * into acct from public.admins where lower(email) = lower(auth.jwt() ->> 'email');
+  update public.jd_signatures set mgr_email = acct.email, mgr_name = trim(signer_name), mgr_role = acct.role,
+    mgr_signature_path = sig_path, mgr_signed_at = now() where id = sig;
+end $$;
+
+create or replace function public.jd_hr_sign(sig uuid, signer_name text, sig_path text) returns void
+language plpgsql security definer set search_path = public as $$
+declare r public.jd_signatures;
+begin
+  if not public.is_hr() then raise exception 'Only the HR manager can give the final sign-off'; end if;
+  select * into r from public.jd_signatures where id = sig;
+  if not found then raise exception 'signature not found'; end if;
+  if r.mgr_signed_at is null then raise exception 'The manager has not signed yet'; end if;
+  if r.hr_signed_at is not null then raise exception 'Already signed by HR'; end if;
+  if sig_path not like 'incoming/%' or coalesce(trim(signer_name), '') = '' then raise exception 'signature missing'; end if;
+  update public.jd_signatures set hr_email = auth.jwt() ->> 'email', hr_name = trim(signer_name),
+    hr_signature_path = sig_path, hr_signed_at = now() where id = sig;
+end $$;
+-- Lets a head or director open the employee's signature image for signatures routed to them.
+create or replace function public.manager_can_view(obj_name text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.jd_signatures s where s.signature_path = obj_name and public.is_jd_manager(s.dept, s.designation));
+$$;
+revoke execute on function public.manager_queue(), public.jd_manager_sign(uuid, text, text), public.jd_hr_sign(uuid, text, text) from public, anon;
+grant execute on function public.manager_queue(), public.jd_manager_sign(uuid, text, text), public.jd_hr_sign(uuid, text, text) to authenticated;
 
 -- ---------------------------------------------------------------
 -- Private file storage
@@ -222,6 +319,9 @@ create policy "credentials public upload" on storage.objects for insert to anon,
   with check (bucket_id = 'credentials' and (storage.foldername(name))[1] = 'incoming');
 create policy "credentials admin read" on storage.objects for select to authenticated
   using (bucket_id = 'credentials' and public.is_admin());
+drop policy if exists "credentials manager read" on storage.objects;
+create policy "credentials manager read" on storage.objects for select to authenticated
+  using (bucket_id = 'credentials' and public.manager_can_view(name));
 create policy "jds read" on storage.objects for select to anon, authenticated using (bucket_id = 'jds');
 create policy "jds admin insert" on storage.objects for insert to authenticated with check (bucket_id = 'jds' and public.is_admin());
 create policy "jds admin update" on storage.objects for update to authenticated using (bucket_id = 'jds' and public.is_admin());

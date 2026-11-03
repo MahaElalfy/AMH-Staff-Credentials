@@ -53,7 +53,7 @@ function armed(btn, label, fn) {
 
 /* ---------- state ---------- */
 const S = {
-  ready: false, isAdmin: false, email: "",
+  ready: false, isAdmin: false, isHR: false, approver: false, role: "", depts: [], myName: "", queue: [], email: "",
   matrix: null, jds: [], staff: [], roster: [], rq: "", tab: "compliance", built: null,
   person: null, sent: {}, signed: {}, finished: false,
   f: { dept: "", status: "", q: "" }, draft: null, dirty: false
@@ -89,12 +89,28 @@ function requiredFor(p, m = M()) {
 // Library job descriptions (dept TITLE_JD) are chosen by job title on the form; the others match by department and position.
 const TITLE_JD = "@title";
 const titleJds = () => S.jds.filter(j => !j.archived && j.dept === TITLE_JD);
+// A department head signs two job descriptions: their own job title's and their leadership one (jobCode2).
+const HEAD_DESIG = "Department Head";
 function jdsFor(p) {
   if (!p) return [];
   const act = S.jds.filter(j => !j.archived);
-  const own = p.jobCode ? act.filter(j => j.dept === TITLE_JD && j.code === p.jobCode) : [];
-  if (own.length) return own;
-  return act.filter(j => j.dept !== TITLE_JD && (j.dept === "*" || j.dept === p.dept) && (!j.positions || !j.positions.length || j.positions.includes(p.position)));
+  const lib = code => code ? act.filter(j => j.dept === TITLE_JD && j.code === code) : [];
+  const own = lib(p.jobCode);
+  const base = own.length ? own : act.filter(j => j.dept !== TITLE_JD && (j.dept === "*" || j.dept === p.dept) && (!j.positions || !j.positions.length || j.positions.includes(p.position)));
+  const extra = p.designation === HEAD_DESIG ? lib(p.jobCode2).filter(j => !base.includes(j)) : [];
+  return [...base, ...extra];
+}
+// Normalises a jd_signatures row (approval chain: employee -> head/director -> HR).
+const normSig = r => ({ id: r.id, employeeId: r.employee_id, fullName: r.full_name, dept: r.dept, position: r.position, designation: r.designation || "", jdId: r.jd_id, version: r.version,
+  typedName: r.typed_name, signedAt: r.signed_at, path: r.signature_path, fileName: "signature.png",
+  mgrName: r.mgr_name, mgrRole: r.mgr_role, mgrSignedAt: r.mgr_signed_at, mgrPath: r.mgr_signature_path, hrName: r.hr_name, hrSignedAt: r.hr_signed_at, hrPath: r.hr_signature_path });
+const mgrLabel = sig => sig && sig.designation === HEAD_DESIG ? "director" : "department head";
+function jdStage(sig, j) {
+  if (!sig) return { k: "emp", label: "Not signed", tone: "warn" };
+  if (sig.version !== j.version) return { k: "emp", label: `Signed v${sig.version} only`, tone: "warn" };
+  if (!sig.mgrSignedAt) return { k: "mgr", label: "Waiting for " + mgrLabel(sig), tone: "pend" };
+  if (!sig.hrSignedAt) return { k: "hr", label: "Waiting for HR", tone: "pend" };
+  return { k: "done", label: "Fully signed", tone: "ok" };
 }
 const jobTitle = code => { const j = code && S.jds.find(x => x.dept === TITLE_JD && x.code === code); return j ? j.title : ""; };
 function evalCred(c, item) {
@@ -145,14 +161,14 @@ async function refresh() {
   if (S.isAdmin) {
     const [subs, sigs, roster] = await Promise.all([fetchAll("current_submissions"), fetchAll("jd_signatures"), fetchAll("roster")]);
     const by = {};
-    const person = (eid) => { const k = eid.trim().toLowerCase(); return by[k] || (by[k] = { uid: k, employeeId: eid.trim(), fullName: "", dept: "", position: "", mobile: "", jobCode: "", updatedAt: "", creds: {}, signatures: {}, onRoster: false, hasSubmitted: false }); };
-    const touchPerson = (u, r, ts) => { u.hasSubmitted = true; if (!u.updatedAt || ts > u.updatedAt) { u.updatedAt = ts; if (!u.onRoster || !u.fullName) u.fullName = r.full_name; if (!u.onRoster || !u.dept) { u.dept = r.dept; u.position = r.position; } if (r.mobile) u.mobile = r.mobile; if (r.job_code) u.jobCode = r.job_code; } };
+    const person = (eid) => { const k = eid.trim().toLowerCase(); return by[k] || (by[k] = { uid: k, employeeId: eid.trim(), fullName: "", dept: "", position: "", mobile: "", jobCode: "", jobCode2: "", designation: "", updatedAt: "", creds: {}, signatures: {}, onRoster: false, hasSubmitted: false }); };
+    const touchPerson = (u, r, ts) => { u.hasSubmitted = true; if (!u.updatedAt || ts > u.updatedAt) { u.updatedAt = ts; if (!u.onRoster || !u.fullName) u.fullName = r.full_name; if (!u.onRoster || !u.dept) { u.dept = r.dept; u.position = r.position; } if (r.mobile) u.mobile = r.mobile; if (r.job_code) u.jobCode = r.job_code; if ("designation" in r) { u.designation = r.designation || ""; u.jobCode2 = r.job_code2 || ""; } } };
     for (const r of roster) { const u = person(r.employee_id); u.onRoster = true; u.fullName = r.full_name || ""; u.dept = r.dept || ""; u.position = r.position || ""; }
     for (const r of subs) { const u = person(r.employee_id);
       u.creds[r.cred_id] = { id: r.id, number: r.number, classification: r.classification, specialty: r.specialty, issueDate: r.issue_date, expiryDate: r.expiry_date, path: r.file_path, fileName: r.file_name, fileType: r.file_type, uploadedAt: r.uploaded_at, status: r.status, note: r.review_note, asName: r.full_name };
       touchPerson(u, r, r.uploaded_at); }
     for (const r of sigs) { const u = person(r.employee_id); const cur = u.signatures[r.jd_id];
-      if (!cur || r.version > cur.version) u.signatures[r.jd_id] = { version: r.version, typedName: r.typed_name, signedAt: r.signed_at, path: r.signature_path, fileName: "signature.png" };
+      if (!cur || r.version > cur.version || (r.version === cur.version && r.signed_at > cur.signedAt)) u.signatures[r.jd_id] = normSig(r);
       touchPerson(u, r, r.signed_at); }
     S.staff = Object.values(by);
     S.roster = roster.sort((a, b) => (a.full_name || "").localeCompare(b.full_name || "") || a.employee_id.localeCompare(b.employee_id));
@@ -245,33 +261,36 @@ function openModal({ title, sub, body, foot, wide }) {
 }
 
 /* ---------- header ---------- */
-const TABS = [["compliance", "Compliance"], ["review", "Review queue"], ["roster", "Staff roster"], ["jds", "Job descriptions"], ["requirements", "Requirements"], ["admins", "Admins"]];
+const TABS = [["compliance", "Compliance"], ["review", "Review queue"], ["signoff", "JD sign-off"], ["roster", "Staff roster"], ["jds", "Job descriptions"], ["requirements", "Requirements"], ["admins", "Users & roles"]];
+const ROLES = { admin: "Admin", hr: "HR manager", head: "Department head", director: "Director" };
 function renderTabs() {
   const nav = $("#tabs"); nav.replaceChildren();
   nav.hidden = !S.isAdmin; $("#stripe").hidden = S.isAdmin;
   if (!S.isAdmin) return;
-  const pend = pendingQueue().length;
-  for (const [id, label] of TABS) nav.append(h("button", { class: "tab", role: "tab", "aria-selected": String(S.tab === id), onclick: () => switchTab(id) }, label, id === "review" && pend ? h("span", { class: "cnt num" }, pend) : null));
+  const pend = pendingQueue().length, hrPend = S.isHR ? signoffRows().filter(x => x.st.k === "hr").length : 0;
+  const cnt = id => id === "review" ? pend : id === "signoff" ? hrPend : 0;
+  for (const [id, label] of TABS) nav.append(h("button", { class: "tab", role: "tab", "aria-selected": String(S.tab === id), onclick: () => switchTab(id) }, label, cnt(id) ? h("span", { class: "cnt num" }, cnt(id)) : null));
 }
 function renderWho() {
   const w = $("#who"); w.replaceChildren();
-  if (S.isAdmin) w.append(h("div", { style: "min-width:0;text-align:right" }, h("div", { class: "w-name" }, S.email), h("div", { class: "w-role" }, "Credentials office (admin)")),
+  if (S.isAdmin || S.approver) w.append(h("div", { style: "min-width:0;text-align:right" }, h("div", { class: "w-name" }, S.myName || S.email), h("div", { class: "w-role" }, S.role === "admin" ? "Credentials office (admin)" : ROLES[S.role] + (S.approver && S.depts.length ? " · " + S.depts.map(deptName).join(", ") : ""))),
     h("button", { class: "btn sm", onclick: async () => { await sb.auth.signOut(); location.hash = ""; location.reload(); } }, "Sign out"));
-  else w.append(h("button", { class: "btn sm ghost-paper", onclick: () => adminLogin() }, "Admin sign in"));
+  else w.append(h("button", { class: "btn sm ghost-paper", onclick: () => adminLogin() }, "Sign in"));
 }
 function switchTab(id) { S.tab = id; S.built = null; try { history.replaceState(null, "", "#" + id); } catch (e) {} render(); }
 function render() {
   if (!S.ready) return;
   renderTabs(); renderWho();
+  if (S.approver) return renderManager();
   if (!S.isAdmin) return renderStaff();
-  ({ compliance: renderCompliance, review: renderReview, roster: renderRoster, jds: renderJds, requirements: renderRequirements, admins: renderAdmins }[S.tab] || renderCompliance)();
+  ({ compliance: renderCompliance, review: renderReview, signoff: renderSignoff, roster: renderRoster, jds: renderJds, requirements: renderRequirements, admins: renderAdmins }[S.tab] || renderCompliance)();
 }
 function setMain(...kids) { $("#main").replaceChildren(...kids.filter(Boolean)); }
 const notice = (title, text) => h("div", { class: "panel empty" }, h("h2", null, title), h("p", { class: "muted" }, text));
 
 function setupErr(e) {
   const m = (e && e.message) || "";
-  if (/Database error|not been added/i.test(m)) return "This email hasn't been added as an admin. Ask an existing admin to add you on the Admins tab.";
+  if (/Database error|not been added/i.test(m)) return "This email hasn't been added to the portal. Ask an admin to add you on the Users & roles tab.";
   if (/already registered|already been registered|already exists/i.test(m)) return "This email already has a password. Use Sign in, or ask another admin to reset it.";
   if (/Signups not allowed|signup.*disabled/i.test(m)) return "Account setup is switched off in Supabase. Turn on \u201cAllow new users to sign up\u201d (Authentication \u2192 Sign In / Providers).";
   if (/confirmation email|sending/i.test(m)) return "Supabase tried to send a confirmation email. Turn off \u201cConfirm email\u201d (Authentication \u2192 Sign In / Providers \u2192 Email) and try again.";
@@ -298,15 +317,15 @@ function adminLogin(mode) {
     }
     const res = await sb.auth.signInWithPassword({ email: em, password: pass.value });
     if (res.error) return fail(setup ? "This email already has a password. Use Sign in, or ask another admin to reset it." : errText(res.error));
-    const adm = await sb.rpc("is_admin");
-    if (adm.data !== true) { await sb.auth.signOut(); return fail("This account doesn't have admin access."); }
-    closeModal(); await startAdmin(res.data.session);
-    if (setup) toast("Your admin account is ready");
+    const acct = await myAccount();
+    if (!acct) { await sb.auth.signOut(); return fail("This account doesn't have access to the portal. Ask an admin to add you on the Users & roles tab."); }
+    closeModal(); await startSession(res.data.session, acct);
+    if (setup) toast("Your account is ready");
   });
   (setup ? pass2 : pass).onkeydown = e => { if (e.key === "Enter") go.click(); };
   const swap = h("button", { class: "btn sm ghost", onclick: () => { closeModal(); adminLogin(setup ? "" : "setup"); } }, setup ? "I already have a password" : "First time? Set your password");
-  openModal({ title: setup ? "Set up your admin account" : "Admin sign in",
-    sub: setup ? "For people an admin has added on the Admins tab. Choose your own password." : "For the credentials office only. Staff don't need to sign in.",
+  openModal({ title: setup ? "Set up your account" : "Sign in",
+    sub: setup ? "For people an admin has added on the Users & roles tab. Choose your own password." : "For the credentials office, HR, directors and department heads. Staff don't need to sign in.",
     body: [h("label", { class: "f", for: "ad-email" }, setup ? "Your work email" : "Email", email),
       h("label", { class: "f", for: "ad-pass" }, setup ? "New password (at least 8 characters)" : "Password", pass),
       setup ? h("label", { class: "f", for: "ad-pass2" }, "Repeat new password", pass2) : null,
@@ -325,7 +344,7 @@ function renderStaff() {
   if (!S.person) return setMain(head, ann, detailsPanel());
   const p = S.person;
   const who = h("div", { class: "panel profile" },
-    pf("Name", p.fullName), pf("Employee ID", p.employeeId), pf("Department", deptName(p.dept)), pf("Position", p.position), jobTitle(p.jobCode) ? pf("Job title", jobTitle(p.jobCode)) : null,
+    pf("Name", p.fullName), pf("Employee ID", p.employeeId), pf("Department", deptName(p.dept)), pf("Position", p.position), jobTitle(p.jobCode) ? pf("Job title", jobTitle(p.jobCode)) : null, p.designation ? pf("Designation", [p.designation, jobTitle(p.jobCode2)].filter(Boolean).join(": ")) : null,
     h("button", { class: "btn sm", onclick: () => { S.person = null; render(); } }, "Change details"));
   const req = requiredFor(p);
   const list = h("div", { class: "list" });
@@ -353,7 +372,7 @@ function renderStaff() {
         : h("button", { class: "btn sm primary", onclick: () => signModal(j) }, "Review and sign"))));
   }
   const parts = [head, ann, who, creds].filter(Boolean);
-  if (jlist.length) parts.push(h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, "Job description")), jl));
+  if (jlist.length) parts.push(h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, jlist.length > 1 ? "Job descriptions" : "Job description"), jlist.length > 1 ? h("span", { class: "muted" }, "Sign each one") : null), jl));
   const nSent = Object.keys(S.sent).length + Object.keys(S.signed).length;
   parts.push(h("div", { class: "savebar" }, h("span", { class: "grow" }, nSent ? `${nSent} item${nSent === 1 ? "" : "s"} submitted` : "Nothing submitted yet"),
     h("button", { class: "btn primary", disabled: !nSent, onclick: () => { S.finished = true; render(); window.scrollTo(0, 0); } }, "I'm finished")));
@@ -378,6 +397,17 @@ function detailsPanel() {
       h("option", { value: "-" }, "My job title isn't listed"));
     f.jobCode.value = p.jobCode || (p.employeeId ? "-" : "");
   }
+  f.designation = h("select", { id: "pf-desig" }, h("option", { value: "" }, "None"), h("option", { value: HEAD_DESIG }, HEAD_DESIG));
+  f.designation.value = p.designation || "";
+  let job2Label = null;
+  if (f.jobCode) {
+    f.jobCode2 = f.jobCode.cloneNode(true); f.jobCode2.id = "pf-job2";
+    f.jobCode2.options[0].textContent = "Choose your department head job title";
+    f.jobCode2.value = p.jobCode2 || "";
+    job2Label = h("label", { class: "f full", for: "pf-job2", hidden: f.designation.value !== HEAD_DESIG }, h("span", { class: "req" }, "Department head job title"), f.jobCode2,
+      h("span", { class: "hint" }, "For example Head of Emergency Medicine or Head Nurse. You'll sign this job description as well as the one for your job title."));
+    f.designation.onchange = () => { job2Label.hidden = f.designation.value !== HEAD_DESIG; };
+  }
   f.dept.value = p.dept || ""; f.position.value = p.position || "";
   const err = h("p", { class: "err", hidden: true });
   const preview = h("p", { class: "hint" });
@@ -386,8 +416,10 @@ function detailsPanel() {
   const go = h("button", { class: "btn primary" }, "Continue to uploads");
   go.onclick = () => busy(go, async () => {
     const v = Object.fromEntries(Object.entries(f).map(([k, el]) => [k, el.value.trim()]));
-    const missing = [!v.employeeId && "employee ID", !v.fullName && "full name", !v.dept && "department", !v.position && "position", f.jobCode && !v.jobCode && "job title"].filter(Boolean);
+    const isHead = v.designation === HEAD_DESIG;
+    const missing = [!v.employeeId && "employee ID", !v.fullName && "full name", !v.dept && "department", !v.position && "position", f.jobCode && !v.jobCode && "job title", f.jobCode2 && isHead && !v.jobCode2 && "department head job title"].filter(Boolean);
     if (v.jobCode === "-") v.jobCode = "";
+    if (!isHead || v.jobCode2 === "-") v.jobCode2 = "";
     if (missing.length) { err.textContent = "Enter your " + missing.join(", ") + "."; err.hidden = false; return; }
     if (v.fullName.length < 2) { err.textContent = "Enter your full name."; err.hidden = false; return; }
     const ok = await sb.rpc("employee_ok", { eid: v.employeeId });
@@ -403,6 +435,8 @@ function detailsPanel() {
         h("label", { class: "f", for: "pf-dept" }, h("span", { class: "req" }, "Department"), f.dept),
         h("label", { class: "f", for: "pf-pos" }, h("span", { class: "req" }, "Position"), f.position),
         f.jobCode ? h("label", { class: "f full", for: "pf-job" }, h("span", { class: "req" }, "Job title"), f.jobCode, h("span", { class: "hint" }, "You'll be asked to read and sign the job description for this title.")) : null,
+        h("label", { class: "f full", for: "pf-desig" }, "Additional designation", f.designation, h("span", { class: "hint" }, "Choose Department Head if you also lead a department.")),
+        job2Label,
         h("label", { class: "f full", for: "pf-mob" }, "Mobile (optional)", f.mobile)),
       preview, err, h("div", { class: "row" }, go)));
 }
@@ -416,11 +450,16 @@ function finishedPanel() {
     h("div", { class: "row" }, h("button", { class: "btn", onclick: () => { S.finished = false; render(); } }, "Add more documents"),
       h("button", { class: "btn ghost", onclick: () => { S.finished = false; S.person = null; S.lastPerson = null; S.sent = {}; S.signed = {}; render(); } }, "Start over for someone else")));
 }
-const personFields = () => ({ employee_id: S.person.employeeId, full_name: S.person.fullName, dept: S.person.dept, position: S.person.position, job_code: S.person.jobCode || null });
-// Inserts a staff record. If the database hasn't been updated with the job_code column yet, retries without it so submissions still go through.
+const personFields = () => ({ employee_id: S.person.employeeId, full_name: S.person.fullName, dept: S.person.dept, position: S.person.position, job_code: S.person.jobCode || null, designation: S.person.designation || null, job_code2: S.person.jobCode2 || null });
+// Inserts a staff record. If the database hasn't been updated with a newer column yet, retries without it so submissions still go through.
 async function insertRow(table, row) {
+  row = { ...row };
   let res = await sb.from(table).insert(row);
-  if (res.error && /job_code/.test(res.error.message || "")) { const { job_code, ...rest } = row; res = await sb.from(table).insert(rest); }
+  for (let i = 0; i < 3 && res.error; i++) {
+    const col = ["job_code2", "job_code", "designation"].find(c => c in row && new RegExp("\\b" + c + "\\b").test(res.error.message || ""));
+    if (!col) break;
+    delete row[col]; res = await sb.from(table).insert(row);
+  }
   must(res);
 }
 const incomingDir = () => `incoming/${safeSeg(S.person.employeeId)}`;
@@ -513,6 +552,117 @@ function signModal(j) {
   (async () => { try { const b = await jdBlob(j.path)(); await renderPdf(view, await b.arrayBuffer()); } catch (e) { view.replaceChildren(h("p", { class: "err" }, "The preview couldn't be shown. " + errText(e))); } })();
 }
 
+/* ---------- job description approvals (department head / director / HR) ---------- */
+function chainText(sig) {
+  if (!sig) return "Not signed";
+  return [`Employee signed v${sig.version} on ${fmtTs(sig.signedAt)}`,
+    sig.mgrSignedAt ? `${sig.mgrRole === "director" ? "Director" : "Head"}: ${sig.mgrName} on ${fmtTs(sig.mgrSignedAt)}` : null,
+    sig.hrSignedAt ? `HR: ${sig.hrName} on ${fmtTs(sig.hrSignedAt)}` : null].filter(Boolean).join(" · ");
+}
+// Latest signature per employee and job description, current version of active JDs only.
+function currentSigs(rows) {
+  const by = {};
+  for (const r of rows) { const k = r.employeeId.trim().toLowerCase() + "|" + r.jdId; if (!by[k] || r.signedAt > by[k].signedAt) by[k] = r; }
+  return Object.values(by).map(sig => ({ sig, j: S.jds.find(j => j.id === sig.jdId) })).filter(x => x.j && !x.j.archived && x.j.version === x.sig.version);
+}
+async function loadQueue() { S.queue = must(await sb.rpc("manager_queue")).map(normSig); }
+function sigImage(path, label) {
+  const box = h("div", { class: "sigbox" }, h("span", { class: "hint" }, "Loading signature…"));
+  getFile("credentials", path).then(b => box.replaceChildren(h("img", { src: URL.createObjectURL(b), alt: label }))).catch(() => box.replaceChildren(h("span", { class: "hint" }, "Signature image couldn't be loaded.")));
+  return box;
+}
+// stage: "mgr" (head/director signs), "hr" (HR signs) or null (view only)
+function approvalModal(sig, stage) {
+  const j = S.jds.find(x => x.id === sig.jdId) || { title: "Job description", version: sig.version };
+  const view = h("div", { class: "viewer" }, h("p", { class: "muted" }, "Opening the job description…"));
+  const block = (title, name, when, path) => h("div", { class: "sigcard" }, h("div", { class: "lbl" }, title), sigImage(path, title), h("div", { class: "sub" }, `${name} · ${fmtTs(when)}`));
+  const chain = h("div", { class: "sigrow" },
+    block("Employee", sig.typedName, sig.signedAt, sig.path),
+    sig.mgrSignedAt ? block(sig.mgrRole === "director" ? "Director" : "Department head", sig.mgrName, sig.mgrSignedAt, sig.mgrPath) : null,
+    sig.hrSignedAt ? block("HR manager", sig.hrName, sig.hrSignedAt, sig.hrPath) : null);
+  const body = [h("p", { class: "muted" }, `${sig.fullName} · Employee ID ${sig.employeeId} · ${deptName(sig.dept)} · ${sig.position}${sig.designation ? " · " + sig.designation : ""}`), view, h("h3", null, "Signatures"), chain];
+  const foot = [h("button", { class: "btn", onclick: closeModal }, stage ? "Cancel" : "Close")];
+  if (stage) {
+    const pad = sigPad();
+    const typed = h("input", { type: "text", id: "ap-name", value: S.myName || "" });
+    const ack = h("input", { type: "checkbox", id: "ap-ack" });
+    const err = h("p", { class: "err", hidden: true });
+    const go = h("button", { class: "btn primary" }, stage === "hr" ? "Sign as HR manager" : "Sign as " + mgrLabel(sig));
+    go.onclick = () => busy(go, async () => {
+      const fail = m => { err.textContent = m; err.hidden = false; };
+      if (!ack.checked) return fail("Tick the confirmation to sign.");
+      if (!typed.value.trim()) return fail("Type your full name.");
+      if (!pad.has()) return fail("Draw your signature in the box.");
+      const path = await uploadTo("credentials", `incoming/_approvals/${sig.id}-${stage}-${rid()}.png`, await pad.blob(), "image/png");
+      must(await sb.rpc(stage === "hr" ? "jd_hr_sign" : "jd_manager_sign", { sig: sig.id, signer_name: typed.value.trim(), sig_path: path }));
+      closeModal();
+      if (S.approver) { await loadQueue(); render(); toast("Signed. It now goes to the HR manager."); } else await reload("Job description fully signed");
+    });
+    body.push(h("div", { class: "notice" }, h("label", { class: "check", for: "ap-ack" }, ack, h("span", null, stage === "hr"
+        ? "I confirm, on behalf of Human Resources, that this job description has been signed by the employee and their manager and is approved as the employee's job description."
+        : `I have reviewed this job description with ${sig.fullName} and confirm it accurately describes their role.`))),
+      h("label", { class: "f", for: "ap-name" }, "Your full name", typed),
+      h("div", { class: "f" }, h("span", null, "Your signature"), pad.el, h("div", { class: "row" }, h("button", { class: "btn sm ghost", onclick: () => pad.clear() }, "Clear signature"), h("span", { class: "hint" }, "Date and time are recorded."))), err);
+    foot.push(go);
+  }
+  openModal({ title: j.title, sub: `Version ${sig.version}` + (j.code ? " · " + j.code : ""), body, foot, wide: true });
+  (async () => { try { const b = await jdBlob(j.path)(); await renderPdf(view, await b.arrayBuffer()); } catch (e) { view.replaceChildren(h("p", { class: "err" }, "The preview couldn't be shown. " + errText(e))); } })();
+}
+function sigList(rows, action) {
+  const list = h("div", { class: "list" });
+  for (const { sig, j, st } of rows) list.append(h("div", { class: "cred" }, h("div", { class: "code" }, "JD"),
+    h("div", { style: "min-width:0" }, h("div", { class: "cred-name" }, `${sig.fullName} · ${j.title}`),
+      h("div", { class: "cred-meta num" }, [`ID ${sig.employeeId}`, `${deptName(sig.dept)} · ${sig.position}`, sig.designation, chainText(sig)].filter(Boolean).join(" · "))),
+    h("span", { class: "chip " + (st || jdStage(sig, j)).tone }, (st || jdStage(sig, j)).label),
+    h("div", { class: "acts" }, action(sig))));
+  return list;
+}
+function renderManager() {
+  const rows = currentSigs(S.queue);
+  const todo = rows.filter(x => !x.sig.mgrSignedAt), done = rows.filter(x => x.sig.mgrSignedAt);
+  const who = S.role === "director" ? "department heads" : "staff";
+  const head = h("div", { class: "page-head" }, h("div", null, h("h1", null, "Job descriptions to sign"),
+      h("p", { class: "muted" }, `Job descriptions signed by ${who} in ${S.depts.length ? S.depts.map(deptName).join(", ") : "your departments"}. Review each one and add your signature; it then goes to the HR manager for final sign-off.`)),
+    h("button", { class: "btn", onclick: e => busy(e.currentTarget, async () => { await loadQueue(); render(); toast("Refreshed"); }) }, "Refresh"));
+  const parts = [head];
+  if (!S.depts.length) parts.push(notice("No departments assigned", "Ask an admin to set your departments on the Users & roles tab."));
+  parts.push(h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, todo.length ? `${todo.length} waiting for your signature` : "Nothing waiting for your signature")),
+    todo.length ? sigList(todo, sig => h("button", { class: "btn sm primary", onclick: () => approvalModal(sig, "mgr") }, "Review and sign")) : h("div", { class: "empty" }, h("p", { class: "muted" }, "When someone in your department signs their job description, it appears here."))));
+  if (done.length) parts.push(h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, "Signed by you")),
+    sigList(done.sort((a, b) => (b.sig.mgrSignedAt || "").localeCompare(a.sig.mgrSignedAt || "")), sig => h("button", { class: "btn sm ghost", onclick: () => approvalModal(sig, null) }, "View"))));
+  setMain(...parts);
+}
+function signoffRows() {
+  const all = [];
+  for (const p of S.staff) for (const sig of Object.values(p.signatures)) all.push(sig);
+  return currentSigs(all).map(x => ({ ...x, st: jdStage(x.sig, x.j) }));
+}
+async function renderSignoff() {
+  S.built = "signoff";
+  const rows = signoffRows();
+  const hr = rows.filter(x => x.st.k === "hr"), mgr = rows.filter(x => x.st.k === "mgr"), done = rows.filter(x => x.st.k === "done");
+  const head = h("div", { class: "page-head" }, h("div", null, h("h1", null, "JD sign-off"),
+      h("p", { class: "muted" }, "Each job description is signed by the employee, then their department head (or a director, for department heads), then the HR manager." + (S.isHR ? "" : " Only the HR manager can give the final sign-off."))),
+    h("button", { class: "btn", onclick: e => busy(e.currentTarget, () => reload("Refreshed")) }, "Refresh"));
+  const mgrBox = h("div");
+  setMain(head,
+    h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, `Waiting for HR (${hr.length})`)),
+      hr.length ? sigList(hr, sig => [h("button", { class: "btn sm ghost", onclick: () => approvalModal(sig, null) }, "View"), S.isHR ? h("button", { class: "btn sm primary", onclick: () => approvalModal(sig, "hr") }, "Sign") : null])
+        : h("div", { class: "empty" }, h("p", { class: "muted" }, "Nothing is waiting for HR."))),
+    h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, `Waiting for department head or director (${mgr.length})`)), mgrBox),
+    done.length ? h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, `Fully signed (${done.length})`)),
+      sigList(done.sort((a, b) => (b.sig.hrSignedAt || "").localeCompare(a.sig.hrSignedAt || "")), sig => h("button", { class: "btn sm ghost", onclick: () => approvalModal(sig, null) }, "View"))) : null);
+  if (!mgr.length) { mgrBox.append(h("div", { class: "empty" }, h("p", { class: "muted" }, "Nothing is waiting for a manager."))); return; }
+  // Flag departments with nobody assigned to sign.
+  let users = [];
+  try { users = must(await sb.rpc("admin_list")) || []; } catch (e) { /* older database */ }
+  const covered = (role, dept) => users.some(u => u.role === role && (u.depts || []).some(d => d === dept || d === "*"));
+  mgrBox.append(sigList(mgr, sig => {
+    const role = sig.designation === HEAD_DESIG ? "director" : "head";
+    return [users.length && !covered(role, sig.dept) ? h("span", { class: "chip bad" }, `No ${ROLES[role].toLowerCase()} for ${deptName(sig.dept)}`) : null, h("button", { class: "btn sm ghost", onclick: () => approvalModal(sig, null) }, "View")];
+  }));
+}
+
 /* ---------- admin: compliance ---------- */
 function renderCompliance() {
   if (S.built !== "compliance") {
@@ -575,12 +725,12 @@ function fillCompliance() {
 }
 function exportCsv() {
   const esc = v => { const s = String(v == null ? "" : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const lines = [["Employee ID", "Full name", "Department", "Position", "Job title", "Mobile", "SCFHS no.", "SCFHS classification", "SCFHS specialty", "Requirement", "Status", "Certificate no.", "Issue date", "Expiry date", "Submitted"].join(",")];
+  const lines = [["Employee ID", "Full name", "Department", "Position", "Job title", "Designation", "Mobile", "SCFHS no.", "SCFHS classification", "SCFHS specialty", "Requirement", "Status", "Certificate no.", "Issue date", "Expiry date", "Submitted"].join(",")];
   for (const p of S.staff) {
     const s = summarize(p), sc = p.creds.scfhs || {};
-    const who = [p.employeeId, p.fullName, deptName(p.dept), p.position, jobTitle(p.jobCode), p.mobile, sc.number, sc.classification, sc.specialty];
+    const who = [p.employeeId, p.fullName, deptName(p.dept), p.position, jobTitle(p.jobCode), [p.designation, jobTitle(p.jobCode2)].filter(Boolean).join(": "), p.mobile, sc.number, sc.classification, sc.specialty];
     for (const r of s.rows) lines.push([...who, r.c.short, r.label, r.item && r.item.number, r.item && r.item.issueDate, r.exp, r.item && r.item.uploadedAt && r.item.uploadedAt.slice(0, 10)].map(esc).join(","));
-    for (const x of s.jds) lines.push([...who, "JD: " + x.j.title + " v" + x.j.version, x.signed ? "Signed" : "Not signed", "", "", "", x.sig && x.sig.signedAt && x.sig.signedAt.slice(0, 10)].map(esc).join(","));
+    for (const x of s.jds) lines.push([...who, "JD: " + x.j.title + " v" + x.j.version, jdStage(x.sig, x.j).label, "", "", "", x.sig && x.sig.signedAt && x.sig.signedAt.slice(0, 10)].map(esc).join(","));
   }
   saveBlob(`AMH-credentials-compliance-${todayIso()}.csv`, new Blob(["﻿" + lines.join("\n")], { type: "text/csv" }));
 }
@@ -617,13 +767,14 @@ function staffDetail(uid) {
   }
   if (!s.rows.length) list.append(h("div", { class: "empty" }, h("p", { class: "muted" }, "No credentials are required for this department and position.")));
   const jl = h("div", { class: "list panel" });
-  for (const x of s.jds) jl.append(h("div", { class: "cred" }, h("div", { class: "code" }, "JD"),
-    h("div", { style: "min-width:0" }, h("div", { class: "cred-name" }, x.j.title), h("div", { class: "cred-meta" }, x.sig ? `Signed version ${x.sig.version} as “${x.sig.typedName}” on ${fmtTs(x.sig.signedAt)}` : "Not signed")),
-    h("span", { class: "chip " + (x.signed ? "ok" : "warn") }, x.signed ? "Signed" : "Not signed"),
-    h("div", { class: "acts" }, x.sig ? h("button", { class: "btn sm ghost", onclick: () => viewStaffFile(x.sig, "Signature: " + x.j.title) }, "Signature") : null)));
+  for (const x of s.jds) { const st = jdStage(x.sig, x.j); jl.append(h("div", { class: "cred" }, h("div", { class: "code" }, "JD"),
+    h("div", { style: "min-width:0" }, h("div", { class: "cred-name" }, x.j.title), h("div", { class: "cred-meta" }, chainText(x.sig))),
+    h("span", { class: "chip " + st.tone }, st.label),
+    h("div", { class: "acts" }, x.sig ? h("button", { class: "btn sm ghost", onclick: () => approvalModal(x.sig, null) }, "View") : null,
+      S.isHR && st.k === "hr" ? h("button", { class: "btn sm primary", onclick: () => approvalModal(x.sig, "hr") }, "HR sign-off") : null))); }
   if (!s.jds.length) jl.append(h("div", { class: "empty" }, h("p", { class: "muted" }, "No job description applies to this position.")));
   openModal({
-    title: p.fullName || "Staff member", sub: [deptName(p.dept), p.position || "—", jobTitle(p.jobCode), "Employee ID " + p.employeeId].filter(Boolean).join(" · "), wide: true,
+    title: p.fullName || "Staff member", sub: [deptName(p.dept), p.position || "—", jobTitle(p.jobCode), p.designation, "Employee ID " + p.employeeId].filter(Boolean).join(" · "), wide: true,
     body: [h("div", { class: "row" }, h("span", { class: "chip " + s.overall.k }, s.overall.label), p.mobile ? h("span", { class: "muted num" }, p.mobile) : null, p.onRoster ? h("span", { class: "muted" }, "On staff roster") : null),
       h("h3", null, "Credentials"), list, h("h3", null, "Job description"), jl],
     foot: [h("button", { class: "btn primary", onclick: closeModal }, "Done")]
@@ -829,56 +980,76 @@ function rosterImportModal() {
     foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go], wide: true });
 }
 
-/* ---------- admin: admins ---------- */
+/* ---------- admin: users & roles ---------- */
+const ROLE_HELP = { admin: "Full access to everything.", hr: "Full access, plus the final signature on every job description.",
+  head: "Signs the job descriptions of staff in their departments. Sees nothing else.", director: "Signs the job descriptions of department heads in their departments. Sees nothing else." };
 async function renderAdmins() {
   S.built = "admins";
-  const head = h("div", { class: "page-head" }, h("div", null, h("h1", null, "Admins"), h("p", { class: "muted" }, "People who can sign in to review documents and manage the portal. Every admin has full access.")),
-    h("button", { class: "btn primary", onclick: addAdminModal }, "Add admin"));
+  const head = h("div", { class: "page-head" }, h("div", null, h("h1", null, "Users & roles"), h("p", { class: "muted" }, "People who can sign in. Admins and the HR manager have full access; department heads and directors only sign job descriptions for their departments.")),
+    h("button", { class: "btn primary", onclick: () => userModal() }, "Add user"));
   const box = h("section", { class: "panel" }, h("div", { class: "empty" }, h("p", { class: "muted" }, "Loading…")));
   setMain(head, box);
   const res = await sb.rpc("admin_list");
   if (S.tab !== "admins") return;
-  if (res.error) { box.replaceChildren(h("div", { class: "empty" }, h("h3", null, "The admin list couldn't load"), h("p", { class: "muted" }, /admin_list|function/i.test(res.error.message || "") ? "The database needs updating: run supabase/schema.sql again in the Supabase SQL Editor, then refresh." : errText(res.error)))); return; }
+  if (res.error) { box.replaceChildren(h("div", { class: "empty" }, h("h3", null, "The user list couldn't load"), h("p", { class: "muted" }, /admin_list|function|column/i.test(res.error.message || "") ? "The database needs updating: run supabase/schema.sql again in the Supabase SQL Editor, then refresh." : errText(res.error)))); return; }
   const me = S.email.toLowerCase();
+  const order = { hr: 0, admin: 1, director: 2, head: 3 };
   const list = h("div", { class: "list" });
-  for (const a of res.data || []) {
+  for (const a of (res.data || []).sort((x, y) => (order[x.role] ?? 9) - (order[y.role] ?? 9) || x.email.localeCompare(y.email))) {
     const self = a.email.toLowerCase() === me;
+    const role = a.role || "admin";
     const state = !a.has_account ? ["warn", "Invited, hasn't set a password"] : a.last_sign_in_at ? ["ok", "Last signed in " + fmtTs(a.last_sign_in_at)] : ["neutral", "Password set, not signed in yet"];
     const act = (fn, msg) => async () => { try { must(await sb.rpc(fn, { target: a.email })); toast(msg); renderAdmins(); } catch (e) { toast(errText(e), "bad"); } };
-    list.append(h("div", { class: "cred" }, h("div", { class: "code" }, (a.email[0] || "?").toUpperCase()),
-      h("div", { style: "min-width:0" }, h("div", { class: "cred-name" }, a.email, self ? h("span", { class: "muted" }, " (you)") : null),
-        h("div", { class: "cred-meta" }, [a.added_by ? "Added by " + a.added_by : "Original admin", a.added_at ? fmtTs(a.added_at) : null].filter(Boolean).join(" · "))),
+    list.append(h("div", { class: "cred" }, h("div", { class: "code" }, (a.full_name || a.email)[0].toUpperCase()),
+      h("div", { style: "min-width:0" }, h("div", { class: "cred-name" }, a.full_name || a.email, self ? h("span", { class: "muted" }, " (you)") : null),
+        h("div", { class: "cred-meta" }, [a.full_name ? a.email : null, ROLES[role] + ((role === "head" || role === "director") ? ": " + ((a.depts || []).map(deptName).join(", ") || "no departments set") : ""), a.added_by ? "Added by " + a.added_by : null].filter(Boolean).join(" · "))),
       h("span", { class: "chip " + state[0] }, state[1]),
-      h("div", { class: "acts" }, self ? null : [
+      h("div", { class: "acts" }, h("button", { class: "btn sm", onclick: () => userModal(a) }, "Edit"), self ? null : [
         a.has_account ? armed(h("button", { class: "btn sm" }, "Reset password"), "Confirm reset", act("admin_reset", `Password reset. ${a.email} can now choose a new one with \u201cFirst time? Set your password\u201d.`)) : h("button", { class: "btn sm", onclick: () => inviteText(a.email) }, "Instructions"),
-        armed(h("button", { class: "btn sm danger" }, "Remove"), "Confirm remove", act("admin_remove", `${a.email} is no longer an admin`))])));
+        armed(h("button", { class: "btn sm danger" }, "Remove"), "Confirm remove", act("admin_remove", `${a.email} can no longer sign in`))])));
   }
-  box.replaceChildren(list, h("div", { class: "panel-body notice-row" }, h("p", { class: "hint" }, "Reset password removes the person's current password; they then set a new one from the sign-in screen. You can't reset or remove your own account here.")));
+  box.replaceChildren(list, h("div", { class: "panel-body notice-row" }, h("p", { class: "hint" }, "Reset password removes the person's current password; they then set a new one from the sign-in screen. You can't reset or remove your own account.")));
 }
 function inviteText(em) {
   const url = location.origin + location.pathname;
-  const msg = `You've been added as an admin on the AMH Staff Credentials Portal.\n\n1. Open ${url}\n2. Click \u201cAdmin sign in\u201d, then \u201cFirst time? Set your password\u201d.\n3. Enter ${em} and choose your password.`;
+  const msg = `You've been added to the AMH Staff Credentials Portal.\n\n1. Open ${url}\n2. Click \u201cSign in\u201d, then \u201cFirst time? Set your password\u201d.\n3. Enter ${em} and choose your password.`;
   const ta = h("textarea", { rows: "6", readonly: true }, msg);
   const copy = h("button", { class: "btn primary" }, "Copy message");
   copy.onclick = async () => { try { await navigator.clipboard.writeText(msg); toast("Copied"); } catch (e) { ta.select(); toast("Select the text and copy it", "bad"); } };
   openModal({ title: "Send this to " + em, sub: "No email is sent automatically.", body: ta, foot: [h("button", { class: "btn", onclick: closeModal }, "Done"), copy] });
 }
-function addAdminModal() {
-  const email = h("input", { type: "email", id: "na-email", placeholder: "name@kfshrc.edu.sa" });
+function userModal(a) {
+  const email = h("input", { type: "email", id: "na-email", placeholder: "name@kfshrc.edu.sa", value: a ? a.email : "", disabled: !!a });
+  const name = h("input", { type: "text", id: "na-name", value: a ? a.full_name || "" : "" });
+  const role = h("select", { id: "na-role" }, Object.entries(ROLES).map(([v, l]) => h("option", { value: v }, l)));
+  role.value = a ? a.role || "admin" : "admin";
+  const help = h("p", { class: "hint" });
+  const cur = new Set(a ? a.depts || [] : []);
+  const depts = [["*", "All departments"], ...M().departments.map(d => [d.id, d.name])].map(([v, l]) => { const cb = h("input", { type: "checkbox", value: v, checked: cur.has(v) }); return { v, cb, el: h("label", { class: "check" }, cb, l) }; });
+  const deptBox = h("div", { class: "f" }, h("span", { class: "req" }, "Departments"), h("div", { class: "checks" }, depts.map(d => d.el)));
+  const upd = () => { help.textContent = ROLE_HELP[role.value]; deptBox.hidden = !(role.value === "head" || role.value === "director"); };
+  role.onchange = upd; upd();
   const err = h("p", { class: "err", hidden: true });
-  const go = h("button", { class: "btn primary" }, "Add admin");
+  const go = h("button", { class: "btn primary" }, a ? "Save" : "Add user");
   go.onclick = () => busy(go, async () => {
+    const fail = m => { err.textContent = m; err.hidden = false; };
     const em = email.value.trim().toLowerCase();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { err.textContent = "Enter a valid email address."; err.hidden = false; return; }
-    must(await sb.rpc("admin_add", { new_email: em }));
-    closeModal(); await renderAdmins(); inviteText(em);
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return fail("Enter a valid email address.");
+    const scoped = role.value === "head" || role.value === "director";
+    const ds = scoped ? depts.filter(d => d.cb.checked).map(d => d.v) : [];
+    if (scoped && !ds.length) return fail("Choose at least one department.");
+    const args = { new_name: name.value.trim(), new_role: role.value, new_depts: ds };
+    must(a ? await sb.rpc("admin_update", { target: a.email, ...args }) : await sb.rpc("admin_add", { new_email: em, ...args }));
+    closeModal(); await renderAdmins();
+    if (a) toast("Saved"); else inviteText(em);
   });
-  email.onkeydown = e => { if (e.key === "Enter") go.click(); };
-  openModal({ title: "Add admin", sub: "They'll have full access: all submissions, reviews, roster, job descriptions and requirements.",
-    body: [h("label", { class: "f", for: "na-email" }, "Work email", email), err], foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go] });
+  openModal({ title: a ? "Edit " + (a.full_name || a.email) : "Add user", sub: a ? a.email : "They'll set their own password from the sign-in screen.",
+    body: [h("div", { class: "grid2" }, h("label", { class: "f", for: "na-email" }, "Work email", email), h("label", { class: "f", for: "na-name" }, "Full name", name),
+      h("label", { class: "f full", for: "na-role" }, "Role", role, help)), deptBox,
+      h("p", { class: "hint" }, "Department head: signs for staff in the departments ticked. Director: signs for the department heads of the departments ticked (for example the CMO for medical departments, the Nursing Director for nursing units)."), err],
+    foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go], wide: true });
 }
 
-/* ---------- admin: job descriptions ---------- */
 function audienceText(j) { if (j.dept === TITLE_JD) return `${j.category ? j.category + " · " : ""}staff who choose this job title`; return `${deptName(j.dept)} · ${j.positions && j.positions.length ? j.positions.join(", ") : "all positions"}`; }
 function renderJds() {
   S.built = "jds";
@@ -979,10 +1150,10 @@ function jdModal(j) {
 function jdSignatures(j) {
   const people = S.staff.filter(p => jdsFor(p).some(x => x.id === j.id)).sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
   const body = people.length ? h("div", { class: "tbl" }, h("table", null, h("thead", null, h("tr", null, ["Staff member", "Position", "Status", ""].map(t => h("th", null, t)))),
-    h("tbody", null, people.map(p => { const s = p.signatures[j.id]; const ok = s && s.version === j.version;
+    h("tbody", null, people.map(p => { const s = p.signatures[j.id]; const st = jdStage(s, j);
       return h("tr", null, h("td", null, h("div", { style: "font-weight:600" }, p.fullName), h("div", { class: "sub num" }, p.employeeId)), h("td", null, deptName(p.dept), h("div", { class: "sub" }, p.position)),
-        h("td", null, h("span", { class: "chip " + (ok ? "ok" : "warn") }, ok ? "Signed " + fmtTs(s.signedAt) : s ? `Signed v${s.version} only` : "Not signed")),
-        h("td", null, s ? h("button", { class: "btn sm ghost", onclick: () => viewStaffFile(s, "Signature: " + p.fullName) }, "Signature") : null)); }))))
+        h("td", null, h("span", { class: "chip " + st.tone }, st.label), s ? h("div", { class: "sub" }, chainText(s)) : null),
+        h("td", null, s ? h("button", { class: "btn sm ghost", onclick: () => approvalModal(s, null) }, "View") : null)); }))))
     : h("p", { class: "muted" }, "No staff match this job description yet.");
   openModal({ title: "Signatures", sub: `${j.title} · version ${j.version} · ${audienceText(j)}`, wide: true, body, foot: [h("button", { class: "btn primary", onclick: closeModal }, "Done")] });
 }
@@ -1056,6 +1227,19 @@ function fillPreview() {
 }
 
 /* ---------- boot ---------- */
+async function myAccount() {
+  const r = await sb.rpc("my_account");
+  if (!r.error) return (r.data || [])[0] || null;
+  const adm = await sb.rpc("is_admin"); // database not yet updated with roles
+  return adm.data === true ? { role: "admin", depts: [], full_name: "" } : null;
+}
+async function startSession(session, acct) {
+  S.email = (session.user.email || "").toLowerCase();
+  S.role = acct.role || "admin"; S.depts = acct.depts || []; S.myName = acct.full_name || "";
+  if (S.role === "admin" || S.role === "hr") { S.isHR = S.role === "hr"; return startAdmin(session); }
+  S.approver = true;
+  try { await loadPublic(); await loadQueue(); render(); } catch (e) { console.error(e); setMain(notice("Your page couldn't load", errText(e))); }
+}
 async function startAdmin(session) {
   S.email = (session.user.email || "").toLowerCase();
   S.isAdmin = true;
@@ -1072,8 +1256,8 @@ async function startAdmin(session) {
   try {
     const { data } = await sb.auth.getSession();
     if (data.session) {
-      const adm = await sb.rpc("is_admin");
-      if (adm.data === true) return startAdmin(data.session);
+      const acct = await myAccount();
+      if (acct) return startSession(data.session, acct);
       await sb.auth.signOut();
     }
     await loadPublic(); render();

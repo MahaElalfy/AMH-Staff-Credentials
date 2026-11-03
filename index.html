@@ -198,6 +198,10 @@ td .sub{font-size:12px; color:var(--muted)}
 .toast.bad{background:var(--bad-fg); color:var(--surface)}
 .announce{display:grid; grid-template-columns:1fr 1fr; gap:12px 24px; padding:14px 18px; margin-bottom:16px; border-radius:var(--r-md); background:var(--warn-bg); color:var(--warn-fg); border:1px solid var(--warn-fg); border-left-width:5px; font-size:14px; line-height:1.5}
 @media (max-width:720px){.announce{grid-template-columns:1fr}}
+.sigrow{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px}
+.sigcard{border:1px solid var(--line); border-radius:var(--r-md); padding:10px 12px; display:flex; flex-direction:column; gap:6px; background:var(--surface)}
+.sigbox{background:#fff; border-radius:var(--r-sm); min-height:70px; display:flex; align-items:center; justify-content:center}
+.sigbox img{max-height:90px; max-width:100%}
 .notice{padding:12px 16px; border-radius:var(--r-md); background:var(--tint); border:1px solid var(--line); font-size:13px}
 @media (prefers-reduced-motion: no-preference){ .toast{animation:up .2s ease-out} @keyframes up{from{transform:translateY(8px); opacity:0}} }
 </style>
