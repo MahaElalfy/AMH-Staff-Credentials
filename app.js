@@ -723,7 +723,7 @@ function renderCompliance() {
     st.value = S.f.status;
     setMain(
       h("div", { class: "page-head" }, h("div", null, h("h1", null, "Compliance"), h("p", { class: "muted" }, "Everyone who has submitted (and everyone on the Staff roster tab) against the requirements for their department and position. Select a person to review their documents.")),
-        h("div", { class: "row" }, h("button", { class: "btn", onclick: e => busy(e.currentTarget, () => reload("Refreshed")) }, "Refresh"), h("button", { class: "btn", onclick: exportCsv }, "Export CSV"))),
+        h("div", { class: "row" }, h("button", { class: "btn", onclick: e => busy(e.currentTarget, () => reload("Refreshed")) }, "Refresh"), h("button", { class: "btn", onclick: exportCsv }, "Export CSV"), h("button", { class: "btn primary", onclick: () => adminUploadModal(null) }, "Upload document"))),
       h("div", { class: "tiles", id: "tiles" }),
       h("section", { class: "panel" }, h("div", { class: "filters" }, h("div", { class: "grow" }, q), dept, st), h("div", { id: "ctbl" })));
   }
@@ -783,6 +783,82 @@ function exportCsv() {
   saveBlob(`AMH-credentials-compliance-${todayIso()}.csv`, new Blob(["﻿" + lines.join("\n")], { type: "text/csv" }));
 }
 
+// Admin uploads a document on an employee's behalf: one of the defined credentials, or any document with a typed name.
+function adminUploadModal(p) {
+  const m = M();
+  const known = () => p || S.staff.find(x => x.uid === eid.value.trim().toLowerCase()) || null;
+  const eid = h("input", { type: "text", id: "au-emp", value: p ? p.employeeId : "", disabled: !!p, autocomplete: "off" });
+  const name = h("input", { type: "text", id: "au-name", value: p ? p.fullName || "" : "" });
+  const dept = h("select", { id: "au-dept" }, h("option", { value: "" }, "Choose department"), m.departments.map(d => h("option", { value: d.id }, d.name)));
+  const pos = h("select", { id: "au-pos" }, h("option", { value: "" }, "Choose position"), m.positions.map(x => h("option", { value: x }, x)));
+  dept.value = p ? p.dept || "" : ""; pos.value = p ? p.position || "" : "";
+  const found = h("p", { class: "hint" });
+  eid.oninput = () => { const k = known(); found.textContent = k ? `Found: ${k.fullName || "—"}, ${deptName(k.dept)} · ${k.position || "—"}` : ""; if (k) { name.value = k.fullName || name.value; dept.value = k.dept || dept.value; pos.value = k.position || pos.value; } };
+  const req = p ? new Set(requiredFor(p).map(c => c.id)) : new Set();
+  const doc = h("select", { id: "au-doc" }, h("option", { value: "" }, "Choose document"),
+    h("optgroup", { label: "Credentials" }, m.credentials.map(c => h("option", { value: c.id }, `${c.short} · ${c.name}${req.has(c.id) ? " (required)" : ""}`))),
+    h("option", { value: "@other" }, "Other document (type a name)"));
+  const docName = h("input", { type: "text", id: "au-docname", maxlength: "80", placeholder: "For example Malpractice insurance, Fellowship certificate, Experience letter" });
+  const nameRow = h("label", { class: "f full", for: "au-docname", hidden: true }, h("span", { class: "req" }, "Document name"), docName);
+  const num = h("input", { type: "text", id: "au-num" });
+  const cls = h("select", { id: "au-cls" }, h("option", { value: "" }, "Choose classification"), SCFHS_CLASSES.map(x => h("option", { value: x }, x)));
+  const spec = h("input", { type: "text", id: "au-spec" });
+  const scfhsRows = [h("label", { class: "f", for: "au-cls", hidden: true }, "Professional classification", cls), h("label", { class: "f", for: "au-spec", hidden: true }, "Specialty", spec)];
+  const issue = h("input", { type: "date", id: "au-issue", max: todayIso() });
+  const exp = h("input", { type: "date", id: "au-exp" });
+  const file = h("input", { type: "file", id: "au-file", accept: "application/pdf,image/jpeg,image/png" });
+  const verify = h("input", { type: "checkbox", id: "au-ver", checked: true });
+  const err = h("p", { class: "err", hidden: true });
+  let expTouched = false; exp.oninput = () => { expTouched = true; };
+  const cred = () => m.credentials.find(c => c.id === doc.value);
+  doc.onchange = () => { nameRow.hidden = doc.value !== "@other"; scfhsRows.forEach(r => r.hidden = doc.value !== "scfhs"); };
+  issue.onchange = () => { const c = cred(); if (c && c.validityMonths && issue.value && !expTouched) exp.value = addMonths(issue.value, c.validityMonths); };
+  const go = h("button", { class: "btn primary" }, "Upload");
+  go.onclick = () => busy(go, async () => {
+    err.hidden = true;
+    const fail = t => { err.textContent = t; err.hidden = false; };
+    const v = { eid: eid.value.trim(), name: name.value.trim(), dept: dept.value, pos: pos.value };
+    if (!v.eid) return fail("Enter the employee ID.");
+    if (v.name.length < 2) return fail("Enter the employee's full name.");
+    if (!v.dept || !v.pos) return fail("Choose the employee's department and position.");
+    if (!doc.value) return fail("Choose which document this is.");
+    const title = docName.value.trim().replace(/\s+/g, " ");
+    if (doc.value === "@other" && title.length < 2) return fail("Enter the document name.");
+    const c = cred();
+    if (c && c.expiry === "required" && !exp.value) return fail("Enter the expiry date for " + c.short + ".");
+    if (exp.value && issue.value && exp.value <= issue.value) return fail("The expiry date must be after the issue date.");
+    if (!file.files[0]) return fail("Attach the file.");
+    let prep; try { prep = await prepareFile(file.files[0]); } catch (e) { return fail(e.message); }
+    const id = rid();
+    const path = await uploadTo("credentials", `incoming/${safeSeg(v.eid)}/office-${id}.${prep.ext}`, prep.blob, prep.type);
+    const row = { employee_id: v.eid, full_name: v.name, dept: v.dept, position: v.pos,
+      cred_id: doc.value === "@other" ? EXTRA + id + ":" + title : doc.value, number: num.value.trim() || null,
+      classification: doc.value === "scfhs" ? cls.value || null : null, specialty: doc.value === "scfhs" ? spec.value.trim() || null : null,
+      issue_date: issue.value || null, expiry_date: exp.value || null, file_path: path, file_name: prep.name, file_type: prep.type, file_size: prep.blob.size };
+    const k = known(); if (k && k.jobCode) row.job_code = k.jobCode;
+    const ins = await sb.from("submissions").insert(row).select("id").single();
+    if (ins.error) throw ins.error;
+    if (verify.checked) must(await sb.from("submissions").update({ status: "verified", reviewed_at: new Date().toISOString(), reviewed_by: S.email, review_note: "Uploaded by the credentials office" }).eq("id", ins.data.id));
+    closeModal();
+    await reload(`${title || (c && c.short) || "Document"} uploaded for ${v.name}`);
+    const again = S.staff.find(x => x.uid === v.eid.toLowerCase()); if (again) staffDetail(again.uid);
+  });
+  openModal({ title: p ? "Upload document for " + (p.fullName || p.employeeId) : "Upload document for an employee",
+    sub: "The document is added to the employee's record as if they had submitted it.",
+    body: [h("div", { class: "grid2" },
+        h("label", { class: "f", for: "au-emp" }, h("span", { class: "req" }, "Employee ID"), eid),
+        h("label", { class: "f", for: "au-name" }, h("span", { class: "req" }, "Full name"), name),
+        h("label", { class: "f", for: "au-dept" }, h("span", { class: "req" }, "Department"), dept),
+        h("label", { class: "f", for: "au-pos" }, h("span", { class: "req" }, "Position"), pos)),
+      p ? null : found,
+      h("div", { class: "grid2" },
+        h("label", { class: "f full", for: "au-doc" }, h("span", { class: "req" }, "Document"), doc), nameRow,
+        h("label", { class: "f full", for: "au-num" }, "Document / certificate number (optional)", num), ...scfhsRows,
+        h("label", { class: "f", for: "au-issue" }, "Issue date", issue), h("label", { class: "f", for: "au-exp" }, "Expiry date", exp)),
+      h("div", { class: "drop" }, file, h("span", { class: "hint" }, "PDF up to 5 MB, or a clear photo (JPG/PNG).")),
+      h("label", { class: "check", for: "au-ver" }, verify, h("span", null, "Mark as verified (you have checked it against the original)")), err],
+    foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go], wide: true });
+}
 async function setReview(item, status, note) {
   must(await sb.from("submissions").update({ status, review_note: note || null, reviewed_at: new Date().toISOString(), reviewed_by: S.email }).eq("id", item.id));
   await reload(status === "verified" ? "Marked as verified" : "Marked as returned");
@@ -832,7 +908,7 @@ function staffDetail(uid) {
     title: p.fullName || "Staff member", sub: [deptName(p.dept), p.position || "—", jobTitle(p.jobCode), p.designation, "Employee ID " + p.employeeId].filter(Boolean).join(" · "), wide: true,
     body: [h("div", { class: "row" }, h("span", { class: "chip " + s.overall.k }, s.overall.label), p.mobile ? h("span", { class: "muted num" }, p.mobile) : null, p.onRoster ? h("span", { class: "muted" }, "On staff roster") : null),
       h("h3", null, "Credentials"), list, xrows.length ? [h("h3", null, "Additional certificates"), xlist] : null, h("h3", null, "Job description"), jl],
-    foot: [h("button", { class: "btn primary", onclick: closeModal }, "Done")]
+    foot: [h("button", { class: "btn", onclick: () => adminUploadModal(p) }, "Upload document"), h("button", { class: "btn primary", onclick: closeModal }, "Done")]
   });
 }
 
