@@ -1320,11 +1320,22 @@ function jdImportModal() {
     go.disabled = !todo.length; go.textContent = todo.length ? `Import ${todo.length}` : "Nothing new to import";
   };
   (async () => {
-    try {
-      const r = await fetch("jd-library/index.json", { cache: "no-store" });
-      if (!r.ok) throw new Error("not found");
-      prepare(await r.json(), async x => { const p = await fetch("jd-library/" + encodeURIComponent(x.file)); if (!p.ok) throw new Error(`${x.code}.pdf couldn't be loaded from the library.`); return await p.blob(); });
-    } catch (e) { summary.replaceChildren(h("p", { class: "err" }, "The built-in library couldn't be loaded. Choose the library file below instead.")); go.textContent = "Import"; }
+    // The library is published with the portal; if a network filter blocks it, try the same files via jsDelivr and GitHub.
+    const sources = CFG.jdLibrarySources || ["jd-library/", "https://cdn.jsdelivr.net/gh/MahaElalfy/AMH-Staff-Credentials@main/jd-library/", "https://raw.githubusercontent.com/MahaElalfy/AMH-Staff-Credentials/main/jd-library/"];
+    const fails = [];
+    for (const base of sources) {
+      try {
+        const r = await fetch(base + "index.json", { cache: "no-store" });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const lib = await r.json();
+        prepare(lib, async x => { const p = await fetch(base + encodeURIComponent(x.file)); if (!p.ok) throw new Error(`HTTP ${p.status} from ${base}`); return await p.blob(); });
+        if (base !== sources[0]) summary.append(h("p", { class: "hint" }, "Loaded from " + new URL(base, location.href).host + " because the portal's own copy was blocked on this network."));
+        return;
+      } catch (e) { fails.push(`${new URL(base, location.href).href}: ${e.message || e}`); }
+    }
+    summary.replaceChildren(h("p", { class: "err" }, "The built-in library couldn't be loaded on this network. Choose the library file below instead, or send these details to whoever set up the portal:"),
+      h("ul", { class: "done-list hint" }, fails.map(t => h("li", null, t))));
+    go.textContent = "Import";
   })();
   file.onchange = async () => {
     const f = file.files[0]; if (!f) return;
