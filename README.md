@@ -67,8 +67,10 @@ Do this in the portal: sign in as admin and open the **Staff roster** tab.
 
 ### 6b. Load the job description library
 1. Sign in as admin, open **Job descriptions** and click **Import JD library**.
-2. Choose `AMH-JD-Library-import.json` (110 job descriptions as AMH-formatted PDFs) and click **Import**. Keep the page open until it finishes.
+2. The portal loads the 110 AMH job descriptions published with it (the `jd-library/` folder: AMH-formatted PDFs built from the AMH Job Description Library). Click **Import 110** and keep the page open until it finishes.
 3. Staff then pick their **Job title** on the form and are asked to sign that job description. Job descriptions already in the portal (same code) are skipped, so the import is safe to run again.
+
+Note: the repository is public, so the PDFs in `jd-library/` can be viewed by anyone with the link.
 
 ### 7. Test before sending to staff
 1. Open the portal. Enter a test employee ID, name, department and position, upload one certificate, and click **I'm finished**.
@@ -90,4 +92,5 @@ Do this in the portal: sign in as admin and open the **Staff roster** tab.
 | `config.js` | Supabase URL and anon key |
 | `logo.png` | AlMather Hospital / KFSHRC lockup |
 | `supabase/schema.sql` | Tables, private storage, access rules and starting requirements |
+| `jd-library/` | The AMH job description library (PDFs and `index.json`) used by **Import JD library** |
 | `.nojekyll` | Tells GitHub Pages to serve the files as they are |

@@ -1,0 +1,997 @@
+{
+ "format": "amh-jd-library",
+ "version": 1,
+ "source": "AMH Job Description Library",
+ "items": [
+  {
+   "code": "JD-HRM-001",
+   "title": "Anesthesiology Consultant",
+   "category": "Anesthesiology",
+   "division": "Medical Services",
+   "grade": "M4",
+   "file": "JD-HRM-001.pdf",
+   "file_name": "JD-HRM-001 Anesthesiology Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-002",
+   "title": "Anesthesiology Associate Consultant",
+   "category": "Anesthesiology",
+   "division": "Medical Services",
+   "grade": "M3",
+   "file": "JD-HRM-002.pdf",
+   "file_name": "JD-HRM-002 Anesthesiology Associate Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-003",
+   "title": "Critical Care Consultant",
+   "category": "Critical Care",
+   "division": "Medical Services",
+   "grade": "M4",
+   "file": "JD-HRM-003.pdf",
+   "file_name": "JD-HRM-003 Critical Care Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-004",
+   "title": "Critical Care Associate Consultant",
+   "category": "Critical Care",
+   "division": "Medical Services",
+   "grade": "M3",
+   "file": "JD-HRM-004.pdf",
+   "file_name": "JD-HRM-004 Critical Care Associate Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-005",
+   "title": "Diagnostic Radiology Associate Consultant",
+   "category": "Radiology",
+   "division": "Medical Services",
+   "grade": "M3",
+   "file": "JD-HRM-005.pdf",
+   "file_name": "JD-HRM-005 Diagnostic Radiology Associate Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-006",
+   "title": "Emergency Medicine Associate Consultant",
+   "category": "Emergency Medicine",
+   "division": "Medical Services",
+   "grade": "M3",
+   "file": "JD-HRM-006.pdf",
+   "file_name": "JD-HRM-006 Emergency Medicine Associate Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-007",
+   "title": "Head of Emergency Medicine",
+   "category": "Emergency Medicine",
+   "division": "Medical Services",
+   "grade": "M4",
+   "file": "JD-HRM-007.pdf",
+   "file_name": "JD-HRM-007 Head of Emergency Medicine.pdf"
+  },
+  {
+   "code": "JD-HRM-008",
+   "title": "General Pediatric Consultant",
+   "category": "Pediatrics",
+   "division": "Medical Services",
+   "grade": "M4",
+   "file": "JD-HRM-008.pdf",
+   "file_name": "JD-HRM-008 General Pediatric Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-009",
+   "title": "General Pediatric Associate Consultant",
+   "category": "Pediatrics",
+   "division": "Medical Services",
+   "grade": "M3",
+   "file": "JD-HRM-009.pdf",
+   "file_name": "JD-HRM-009 General Pediatric Associate Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-010",
+   "title": "General Surgery Specialist",
+   "category": "Surgery",
+   "division": "Medical Services",
+   "grade": "M2",
+   "file": "JD-HRM-010.pdf",
+   "file_name": "JD-HRM-010 General Surgery Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-011",
+   "title": "Internal Medicine Consultant",
+   "category": "Internal Medicine",
+   "division": "Medical Services",
+   "grade": "M4",
+   "file": "JD-HRM-011.pdf",
+   "file_name": "JD-HRM-011 Internal Medicine Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-012",
+   "title": "Internal Medicine Associate Consultant",
+   "category": "Internal Medicine",
+   "division": "Medical Services",
+   "grade": "M3",
+   "file": "JD-HRM-012.pdf",
+   "file_name": "JD-HRM-012 Internal Medicine Associate Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-013",
+   "title": "Internal Medicine & Pulmonology Consultant",
+   "category": "Internal Medicine",
+   "division": "Medical Services",
+   "grade": "M4",
+   "file": "JD-HRM-013.pdf",
+   "file_name": "JD-HRM-013 Internal Medicine & Pulmonology Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-014",
+   "title": "Obstetrics & Gynecology Associate Consultant",
+   "category": "Obstetrics & Gynecology",
+   "division": "Medical Services",
+   "grade": "M3",
+   "file": "JD-HRM-014.pdf",
+   "file_name": "JD-HRM-014 Obstetrics & Gynecology Associate Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-015",
+   "title": "Urology Associate Consultant",
+   "category": "Surgery",
+   "division": "Medical Services",
+   "grade": "M3",
+   "file": "JD-HRM-015.pdf",
+   "file_name": "JD-HRM-015 Urology Associate Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-016",
+   "title": "Staff Nurse 1",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N2",
+   "file": "JD-HRM-016.pdf",
+   "file_name": "JD-HRM-016 Staff Nurse 1.pdf"
+  },
+  {
+   "code": "JD-HRM-017",
+   "title": "Staff Nurse 2",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N1",
+   "file": "JD-HRM-017.pdf",
+   "file_name": "JD-HRM-017 Staff Nurse 2.pdf"
+  },
+  {
+   "code": "JD-HRM-018",
+   "title": "Staff Nurse 1 — L&D",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N2",
+   "file": "JD-HRM-018.pdf",
+   "file_name": "JD-HRM-018 Staff Nurse 1 - L&D.pdf"
+  },
+  {
+   "code": "JD-HRM-019",
+   "title": "Staff Nurse 1 — Nursery",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N2",
+   "file": "JD-HRM-019.pdf",
+   "file_name": "JD-HRM-019 Staff Nurse 1 - Nursery.pdf"
+  },
+  {
+   "code": "JD-HRM-020",
+   "title": "Staff Nurse 1 — OR",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N2",
+   "file": "JD-HRM-020.pdf",
+   "file_name": "JD-HRM-020 Staff Nurse 1 - OR.pdf"
+  },
+  {
+   "code": "JD-HRM-021",
+   "title": "Staff Nurse 1 — PACU",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N2",
+   "file": "JD-HRM-021.pdf",
+   "file_name": "JD-HRM-021 Staff Nurse 1 - PACU.pdf"
+  },
+  {
+   "code": "JD-HRM-022",
+   "title": "Staff Nurse 1 — Women Health Unit",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N2",
+   "file": "JD-HRM-022.pdf",
+   "file_name": "JD-HRM-022 Staff Nurse 1 - Women Health Unit.pdf"
+  },
+  {
+   "code": "JD-HRM-023",
+   "title": "Head Nurse",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N4",
+   "file": "JD-HRM-023.pdf",
+   "file_name": "JD-HRM-023 Head Nurse.pdf"
+  },
+  {
+   "code": "JD-HRM-024",
+   "title": "Nursing Supervisor",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N4",
+   "file": "JD-HRM-024.pdf",
+   "file_name": "JD-HRM-024 Nursing Supervisor.pdf"
+  },
+  {
+   "code": "JD-HRM-025",
+   "title": "Nursing Director",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N5",
+   "file": "JD-HRM-025.pdf",
+   "file_name": "JD-HRM-025 Nursing Director.pdf"
+  },
+  {
+   "code": "JD-HRM-026",
+   "title": "Nursing Education & Development Manager",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N4",
+   "file": "JD-HRM-026.pdf",
+   "file_name": "JD-HRM-026 Nursing Education & Development Manager.pdf"
+  },
+  {
+   "code": "JD-HRM-027",
+   "title": "Clinical Instructor",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N3",
+   "file": "JD-HRM-027.pdf",
+   "file_name": "JD-HRM-027 Clinical Instructor.pdf"
+  },
+  {
+   "code": "JD-HRM-028",
+   "title": "Health Educator (Patient & Family)",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N3",
+   "file": "JD-HRM-028.pdf",
+   "file_name": "JD-HRM-028 Health Educator (Patient & Family).pdf"
+  },
+  {
+   "code": "JD-HRM-029",
+   "title": "Lab Manager",
+   "category": "Laboratory",
+   "division": "Medical Services",
+   "grade": "AH4",
+   "file": "JD-HRM-029.pdf",
+   "file_name": "JD-HRM-029 Lab Manager.pdf"
+  },
+  {
+   "code": "JD-HRM-030",
+   "title": "Lab Technologist",
+   "category": "Laboratory",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-030.pdf",
+   "file_name": "JD-HRM-030 Lab Technologist.pdf"
+  },
+  {
+   "code": "JD-HRM-031",
+   "title": "Lab Technician",
+   "category": "Laboratory",
+   "division": "Medical Services",
+   "grade": "AH1",
+   "file": "JD-HRM-031.pdf",
+   "file_name": "JD-HRM-031 Lab Technician.pdf"
+  },
+  {
+   "code": "JD-HRM-032",
+   "title": "Radiology Technologist / Technician",
+   "category": "Radiology",
+   "division": "Medical Services",
+   "grade": "AH1–AH2",
+   "file": "JD-HRM-032.pdf",
+   "file_name": "JD-HRM-032 Radiology Technologist - Technician.pdf"
+  },
+  {
+   "code": "JD-HRM-033",
+   "title": "Interventional Radiology Technologist",
+   "category": "Radiology",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-033.pdf",
+   "file_name": "JD-HRM-033 Interventional Radiology Technologist.pdf"
+  },
+  {
+   "code": "JD-HRM-034",
+   "title": "Anesthesia Technologist",
+   "category": "Anesthesiology",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-034.pdf",
+   "file_name": "JD-HRM-034 Anesthesia Technologist.pdf"
+  },
+  {
+   "code": "JD-HRM-035",
+   "title": "Respiratory Therapist",
+   "category": "Respiratory Care",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-035.pdf",
+   "file_name": "JD-HRM-035 Respiratory Therapist.pdf"
+  },
+  {
+   "code": "JD-HRM-036",
+   "title": "Pharmacy Manager",
+   "category": "Pharmacy",
+   "division": "Medical Services",
+   "grade": "AH4",
+   "file": "JD-HRM-036.pdf",
+   "file_name": "JD-HRM-036 Pharmacy Manager.pdf"
+  },
+  {
+   "code": "JD-HRM-037",
+   "title": "Pharmacy Specialist",
+   "category": "Pharmacy",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-037.pdf",
+   "file_name": "JD-HRM-037 Pharmacy Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-038",
+   "title": "Emergency Medical Specialist",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "AH2",
+   "file": "JD-HRM-038.pdf",
+   "file_name": "JD-HRM-038 Emergency Medical Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-039",
+   "title": "Orthopedic Technician",
+   "category": "Surgery",
+   "division": "Medical Services",
+   "grade": "AH1",
+   "file": "JD-HRM-039.pdf",
+   "file_name": "JD-HRM-039 Orthopedic Technician.pdf"
+  },
+  {
+   "code": "JD-HRM-040",
+   "title": "CSSD Technician",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "AH1",
+   "file": "JD-HRM-040.pdf",
+   "file_name": "JD-HRM-040 CSSD Technician.pdf"
+  },
+  {
+   "code": "JD-HRM-041",
+   "title": "Infection Prevention & Control Practitioner",
+   "category": "Infection Prevention & Control",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-041.pdf",
+   "file_name": "JD-HRM-041 Infection Prevention & Control Practitioner.pdf"
+  },
+  {
+   "code": "JD-HRM-042",
+   "title": "Clinical Engineer",
+   "category": "Clinical Engineering",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-042.pdf",
+   "file_name": "JD-HRM-042 Clinical Engineer.pdf"
+  },
+  {
+   "code": "JD-HRM-043",
+   "title": "Social Worker",
+   "category": "Nursing & Allied Health",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-043.pdf",
+   "file_name": "JD-HRM-043 Social Worker.pdf"
+  },
+  {
+   "code": "JD-HRM-044",
+   "title": "Patient Services Associate",
+   "category": "Patient Access & Experience",
+   "division": "Administration & Operations",
+   "grade": "EC2",
+   "file": "JD-HRM-044.pdf",
+   "file_name": "JD-HRM-044 Patient Services Associate.pdf"
+  },
+  {
+   "code": "JD-HRM-045",
+   "title": "Patient Services Supervisor",
+   "category": "Patient Access & Experience",
+   "division": "Administration & Operations",
+   "grade": "EC3",
+   "file": "JD-HRM-045.pdf",
+   "file_name": "JD-HRM-045 Patient Services Supervisor.pdf"
+  },
+  {
+   "code": "JD-HRM-046",
+   "title": "Patient Services Manager",
+   "category": "Patient Access & Experience",
+   "division": "Administration & Operations",
+   "grade": "EC4",
+   "file": "JD-HRM-046.pdf",
+   "file_name": "JD-HRM-046 Patient Services Manager.pdf"
+  },
+  {
+   "code": "JD-HRM-047",
+   "title": "Administrative Specialist",
+   "category": "Administration",
+   "division": "Administration & Operations",
+   "grade": "EC2",
+   "file": "JD-HRM-047.pdf",
+   "file_name": "JD-HRM-047 Administrative Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-048",
+   "title": "Senior Administrative Specialist",
+   "category": "Administration",
+   "division": "Administration & Operations",
+   "grade": "EC3",
+   "file": "JD-HRM-048.pdf",
+   "file_name": "JD-HRM-048 Senior Administrative Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-049",
+   "title": "Human Capital Manager",
+   "category": "Human Resources",
+   "division": "Administration & Operations",
+   "grade": "EC4",
+   "file": "JD-HRM-049.pdf",
+   "file_name": "JD-HRM-049 Human Capital Manager.pdf"
+  },
+  {
+   "code": "JD-HRM-050",
+   "title": "Senior Human Capital Specialist",
+   "category": "Human Resources",
+   "division": "Administration & Operations",
+   "grade": "EC3",
+   "file": "JD-HRM-050.pdf",
+   "file_name": "JD-HRM-050 Senior Human Capital Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-051",
+   "title": "Finance Manager",
+   "category": "Finance",
+   "division": "Finance",
+   "grade": "EC4",
+   "file": "JD-HRM-051.pdf",
+   "file_name": "JD-HRM-051 Finance Manager.pdf"
+  },
+  {
+   "code": "JD-HRM-052",
+   "title": "Supply Chain Specialist",
+   "category": "Supply Chain",
+   "division": "Administration & Operations",
+   "grade": "EC3",
+   "file": "JD-HRM-052.pdf",
+   "file_name": "JD-HRM-052 Supply Chain Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-053",
+   "title": "IT Specialist",
+   "category": "Information Technology",
+   "division": "Technology",
+   "grade": "EC2",
+   "file": "JD-HRM-053.pdf",
+   "file_name": "JD-HRM-053 IT Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-054",
+   "title": "Project Manager",
+   "category": "Projects / PMO",
+   "division": "Administration & Operations",
+   "grade": "EC4",
+   "file": "JD-HRM-054.pdf",
+   "file_name": "JD-HRM-054 Project Manager.pdf"
+  },
+  {
+   "code": "JD-HRM-055",
+   "title": "Quality & Safety Manager",
+   "category": "Quality & Patient Safety",
+   "division": "Quality & Patient Safety",
+   "grade": "EC4",
+   "file": "JD-HRM-055.pdf",
+   "file_name": "JD-HRM-055 Quality & Safety Manager.pdf"
+  },
+  {
+   "code": "JD-HRM-056",
+   "title": "Chief Executive Officer",
+   "category": "Executive Office",
+   "division": "Executive",
+   "grade": "EC7",
+   "file": "JD-HRM-056.pdf",
+   "file_name": "JD-HRM-056 Chief Executive Officer.pdf"
+  },
+  {
+   "code": "JD-HRM-057",
+   "title": "Chief Operating Officer",
+   "category": "Executive Office",
+   "division": "Executive",
+   "grade": "EC6",
+   "file": "JD-HRM-057.pdf",
+   "file_name": "JD-HRM-057 Chief Operating Officer.pdf"
+  },
+  {
+   "code": "JD-HRM-058",
+   "title": "Chief Digital Officer",
+   "category": "Executive Office",
+   "division": "Executive",
+   "grade": "EC6",
+   "file": "JD-HRM-058.pdf",
+   "file_name": "JD-HRM-058 Chief Digital Officer.pdf"
+  },
+  {
+   "code": "JD-HRM-059",
+   "title": "Chief Nursing Officer (CNO)",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N6",
+   "file": "JD-HRM-059.pdf",
+   "file_name": "JD-HRM-059 Chief Nursing Officer (CNO).pdf"
+  },
+  {
+   "code": "JD-HRM-060",
+   "title": "Facility Manager",
+   "category": "Facilities & Support Services",
+   "division": "Administration & Operations",
+   "grade": "FS5",
+   "file": "JD-HRM-060.pdf",
+   "file_name": "JD-HRM-060 Facility Manager.pdf"
+  },
+  {
+   "code": "JD-HRM-061",
+   "title": "Facility Engineer",
+   "category": "Facilities & Support Services",
+   "division": "Administration & Operations",
+   "grade": "FS3",
+   "file": "JD-HRM-061.pdf",
+   "file_name": "JD-HRM-061 Facility Engineer.pdf"
+  },
+  {
+   "code": "JD-HRM-062",
+   "title": "Assistant Board Secretary",
+   "category": "Board Affairs",
+   "division": "Executive",
+   "grade": "EC3",
+   "file": "JD-HRM-062.pdf",
+   "file_name": "JD-HRM-062 Assistant Board Secretary.pdf"
+  },
+  {
+   "code": "JD-HRM-063",
+   "title": "Consultant",
+   "category": "Executive Office",
+   "division": "Executive",
+   "grade": "EC4",
+   "file": "JD-HRM-063.pdf",
+   "file_name": "JD-HRM-063 Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-064",
+   "title": "Assistant Consultant Neonatologist",
+   "category": "Neonatology / NICU (under Pediatrics)",
+   "division": "Medical Services",
+   "grade": "M3",
+   "file": "JD-HRM-064.pdf",
+   "file_name": "JD-HRM-064 Assistant Consultant Neonatologist.pdf"
+  },
+  {
+   "code": "JD-HRM-065",
+   "title": "Senior Clinical Engineer",
+   "category": "Clinical Engineering",
+   "division": "Medical Services",
+   "grade": "AH3",
+   "file": "JD-HRM-065.pdf",
+   "file_name": "JD-HRM-065 Senior Clinical Engineer.pdf"
+  },
+  {
+   "code": "JD-HRM-066",
+   "title": "PICU Consultant",
+   "category": "Pediatric Intensive Care Unit (PICU)",
+   "division": "Medical Services",
+   "grade": "M4",
+   "file": "JD-HRM-066.pdf",
+   "file_name": "JD-HRM-066 PICU Consultant.pdf"
+  },
+  {
+   "code": "JD-HRM-067",
+   "title": "Clinical Nutritionist",
+   "category": "Clinical Nutrition & Dietetics",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-067.pdf",
+   "file_name": "JD-HRM-067 Clinical Nutritionist.pdf"
+  },
+  {
+   "code": "JD-HRM-068",
+   "title": "Cath Lab Technologist",
+   "category": "Cardiac Catheterization Laboratory (Cardiology)",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-068.pdf",
+   "file_name": "JD-HRM-068 Cath Lab Technologist.pdf"
+  },
+  {
+   "code": "JD-HRM-069",
+   "title": "Administrative Associate",
+   "category": "Administration",
+   "division": "Administration & Operations",
+   "grade": "EC1",
+   "file": "JD-HRM-069.pdf",
+   "file_name": "JD-HRM-069 Administrative Associate.pdf"
+  },
+  {
+   "code": "JD-HRM-070",
+   "title": "CSSD Specialist",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "AH2",
+   "file": "JD-HRM-070.pdf",
+   "file_name": "JD-HRM-070 CSSD Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-071",
+   "title": "Clinical Dietitian",
+   "category": "Clinical Nutrition & Dietetics",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-071.pdf",
+   "file_name": "JD-HRM-071 Clinical Dietitian.pdf"
+  },
+  {
+   "code": "JD-HRM-072",
+   "title": "Senior Clinical Dietitian",
+   "category": "Clinical Nutrition & Dietetics",
+   "division": "Medical Services",
+   "grade": "AH3",
+   "file": "JD-HRM-072.pdf",
+   "file_name": "JD-HRM-072 Senior Clinical Dietitian.pdf"
+  },
+  {
+   "code": "JD-HRM-073",
+   "title": "Cardiovascular Technologist",
+   "category": "Cardiology (Cardiovascular Services)",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-073.pdf",
+   "file_name": "JD-HRM-073 Cardiovascular Technologist.pdf"
+  },
+  {
+   "code": "JD-HRM-074",
+   "title": "Audiologist",
+   "category": "Audiology (ENT)",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-074.pdf",
+   "file_name": "JD-HRM-074 Audiologist.pdf"
+  },
+  {
+   "code": "JD-HRM-075",
+   "title": "Physiotherapist",
+   "category": "Physiotherapy / Rehabilitation",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-075.pdf",
+   "file_name": "JD-HRM-075 Physiotherapist.pdf"
+  },
+  {
+   "code": "JD-HRM-076",
+   "title": "Cashier",
+   "category": "Finance (Revenue Cycle)",
+   "division": "Administration & Operations",
+   "grade": "EC1",
+   "file": "JD-HRM-076.pdf",
+   "file_name": "JD-HRM-076 Cashier.pdf"
+  },
+  {
+   "code": "JD-HRM-077",
+   "title": "Ultrasound Technologist",
+   "category": "Radiology",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-077.pdf",
+   "file_name": "JD-HRM-077 Ultrasound Technologist.pdf"
+  },
+  {
+   "code": "JD-HRM-078",
+   "title": "Human Capital Specialist",
+   "category": "Human Resources",
+   "division": "Administration & Operations",
+   "grade": "EC2",
+   "file": "JD-HRM-078.pdf",
+   "file_name": "JD-HRM-078 Human Capital Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-079",
+   "title": "Midwife",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N2",
+   "file": "JD-HRM-079.pdf",
+   "file_name": "JD-HRM-079 Midwife.pdf"
+  },
+  {
+   "code": "JD-HRM-080",
+   "title": "Charge Nurse",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N3",
+   "file": "JD-HRM-080.pdf",
+   "file_name": "JD-HRM-080 Charge Nurse.pdf"
+  },
+  {
+   "code": "JD-HRM-081",
+   "title": "Deputy Chief Nursing Officer",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N5",
+   "file": "JD-HRM-081.pdf",
+   "file_name": "JD-HRM-081 Deputy Chief Nursing Officer.pdf"
+  },
+  {
+   "code": "JD-HRM-082",
+   "title": "Nurse Coordinator",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N3",
+   "file": "JD-HRM-082.pdf",
+   "file_name": "JD-HRM-082 Nurse Coordinator.pdf"
+  },
+  {
+   "code": "JD-HRM-083",
+   "title": "Nursing Recruitment Coordinator",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N3",
+   "file": "JD-HRM-083.pdf",
+   "file_name": "JD-HRM-083 Nursing Recruitment Coordinator.pdf"
+  },
+  {
+   "code": "JD-HRM-084",
+   "title": "Infection Control Nurse Coordinator",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N3",
+   "file": "JD-HRM-084.pdf",
+   "file_name": "JD-HRM-084 Infection Control Nurse Coordinator.pdf"
+  },
+  {
+   "code": "JD-HRM-085",
+   "title": "Quality Nurse Coordinator",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "N3",
+   "file": "JD-HRM-085.pdf",
+   "file_name": "JD-HRM-085 Quality Nurse Coordinator.pdf"
+  },
+  {
+   "code": "JD-HRM-086",
+   "title": "Patient Care Assistant (PCA)",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "FS1",
+   "file": "JD-HRM-086.pdf",
+   "file_name": "JD-HRM-086 Patient Care Assistant (PCA).pdf"
+  },
+  {
+   "code": "JD-HRM-087",
+   "title": "CSSD Supervisor",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "AH3",
+   "file": "JD-HRM-087.pdf",
+   "file_name": "JD-HRM-087 CSSD Supervisor.pdf"
+  },
+  {
+   "code": "JD-HRM-088",
+   "title": "Senior CSSD Specialist",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "AH3",
+   "file": "JD-HRM-088.pdf",
+   "file_name": "JD-HRM-088 Senior CSSD Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-089",
+   "title": "Emergency Medical Specialist Supervisor",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "AH4",
+   "file": "JD-HRM-089.pdf",
+   "file_name": "JD-HRM-089 Emergency Medical Specialist Supervisor.pdf"
+  },
+  {
+   "code": "JD-HRM-090",
+   "title": "Senior Emergency Medical Specialist",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "AH3",
+   "file": "JD-HRM-090.pdf",
+   "file_name": "JD-HRM-090 Senior Emergency Medical Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-091",
+   "title": "Emergency Medical Technician",
+   "category": "Nursing",
+   "division": "Nursing & Allied Health",
+   "grade": "AH1",
+   "file": "JD-HRM-091.pdf",
+   "file_name": "JD-HRM-091 Emergency Medical Technician.pdf"
+  },
+  {
+   "code": "JD-HRM-092",
+   "title": "Pharmacy Supervisor",
+   "category": "Pharmacy",
+   "division": "Medical Services",
+   "grade": "AH3",
+   "file": "JD-HRM-092.pdf",
+   "file_name": "JD-HRM-092 Pharmacy Supervisor.pdf"
+  },
+  {
+   "code": "JD-HRM-093",
+   "title": "Quality Specialist",
+   "category": "Quality & Patient Safety",
+   "division": "Quality & Patient Safety",
+   "grade": "EC2",
+   "file": "JD-HRM-093.pdf",
+   "file_name": "JD-HRM-093 Quality Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-094",
+   "title": "Food Service Associate",
+   "category": "Food & Nutrition Services",
+   "division": "Support Services",
+   "grade": "FS1",
+   "file": "JD-HRM-094.pdf",
+   "file_name": "JD-HRM-094 Food Service Associate.pdf"
+  },
+  {
+   "code": "JD-HRM-095",
+   "title": "Laboratory Supervisor",
+   "category": "Laboratory",
+   "division": "Medical Services",
+   "grade": "AH3",
+   "file": "JD-HRM-095.pdf",
+   "file_name": "JD-HRM-095 Laboratory Supervisor.pdf"
+  },
+  {
+   "code": "JD-HRM-096",
+   "title": "Orthopedic Specialist",
+   "category": "Surgery",
+   "division": "Medical Services",
+   "grade": "AH2",
+   "file": "JD-HRM-096.pdf",
+   "file_name": "JD-HRM-096 Orthopedic Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-097",
+   "title": "Senior Quality Specialist",
+   "category": "Quality & Patient Safety",
+   "division": "Quality & Patient Safety",
+   "grade": "EC3",
+   "file": "JD-HRM-097.pdf",
+   "file_name": "JD-HRM-097 Senior Quality Specialist.pdf"
+  },
+  {
+   "code": "JD-HRM-098",
+   "title": "Assistant to the CEO",
+   "category": "Executive Office",
+   "division": "Executive Office",
+   "grade": "EC4",
+   "file": "JD-HRM-098.pdf",
+   "file_name": "JD-HRM-098 Assistant to the CEO.pdf"
+  },
+  {
+   "code": "JD-HRM-099",
+   "title": "Chief Medical Officer",
+   "category": "Executive Office",
+   "division": "Executive",
+   "grade": "EC6",
+   "file": "JD-HRM-099.pdf",
+   "file_name": "JD-HRM-099 Chief Medical Officer.pdf"
+  },
+  {
+   "code": "JD-HRM-100",
+   "title": "Driver",
+   "category": "Transportation / Facilities & Support Services",
+   "division": "Support Services",
+   "grade": "FS1",
+   "file": "JD-HRM-100.pdf",
+   "file_name": "JD-HRM-100 Driver.pdf"
+  },
+  {
+   "code": "JD-HRM-101",
+   "title": "HR Supervisor",
+   "category": "Human Resources",
+   "division": "Administration & Operations",
+   "grade": "EC3",
+   "file": "JD-HRM-101.pdf",
+   "file_name": "JD-HRM-101 HR Supervisor.pdf"
+  },
+  {
+   "code": "JD-HRM-102",
+   "title": "IT Manager",
+   "category": "Information Technology",
+   "division": "Technology",
+   "grade": "EC4",
+   "file": "JD-HRM-102.pdf",
+   "file_name": "JD-HRM-102 IT Manager.pdf"
+  },
+  {
+   "code": "JD-HRM-103",
+   "title": "Supply Chain Director",
+   "category": "Supply Chain Management",
+   "division": "Administration & Operations",
+   "grade": "EC5",
+   "file": "JD-HRM-103.pdf",
+   "file_name": "JD-HRM-103 Supply Chain Director.pdf"
+  },
+  {
+   "code": "JD-HRM-104",
+   "title": "Supply Chain Supervisor – P&C",
+   "category": "Supply Chain Management",
+   "division": "Administration & Operations",
+   "grade": "EC3",
+   "file": "JD-HRM-104.pdf",
+   "file_name": "JD-HRM-104 Supply Chain Supervisor - P&C.pdf"
+  },
+  {
+   "code": "JD-HRM-105",
+   "title": "Supply Chain Specialist – P&C",
+   "category": "Supply Chain Management",
+   "division": "Administration & Operations",
+   "grade": "EC2",
+   "file": "JD-HRM-105.pdf",
+   "file_name": "JD-HRM-105 Supply Chain Specialist - P&C.pdf"
+  },
+  {
+   "code": "JD-HRM-106",
+   "title": "Supply Chain Associate – P&C",
+   "category": "Supply Chain Management",
+   "division": "Administration & Operations",
+   "grade": "EC1",
+   "file": "JD-HRM-106.pdf",
+   "file_name": "JD-HRM-106 Supply Chain Associate - P&C.pdf"
+  },
+  {
+   "code": "JD-HRM-107",
+   "title": "Supply Chain Supervisor – Logistics",
+   "category": "Supply Chain Management",
+   "division": "Administration & Operations",
+   "grade": "EC3",
+   "file": "JD-HRM-107.pdf",
+   "file_name": "JD-HRM-107 Supply Chain Supervisor - Logistics.pdf"
+  },
+  {
+   "code": "JD-HRM-108",
+   "title": "Supply Chain Specialist – Logistics",
+   "category": "Supply Chain Management",
+   "division": "Administration & Operations",
+   "grade": "EC2",
+   "file": "JD-HRM-108.pdf",
+   "file_name": "JD-HRM-108 Supply Chain Specialist - Logistics.pdf"
+  },
+  {
+   "code": "JD-HRM-109",
+   "title": "Supply Chain Associate – Logistics",
+   "category": "Supply Chain Management",
+   "division": "Administration & Operations",
+   "grade": "EC1",
+   "file": "JD-HRM-109.pdf",
+   "file_name": "JD-HRM-109 Supply Chain Associate - Logistics.pdf"
+  },
+  {
+   "code": "JD-HRM-110",
+   "title": "Radiation Safety Officer",
+   "category": "Radiology / Radiation Safety",
+   "division": "Medical Services",
+   "grade": "AH3",
+   "file": "JD-HRM-110.pdf",
+   "file_name": "JD-HRM-110 Radiation Safety Officer.pdf"
+  }
+ ]
+}
