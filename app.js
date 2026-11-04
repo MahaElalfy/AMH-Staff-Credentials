@@ -35,6 +35,7 @@ async function busy(btn, fn) {
 function errText(e) {
   const m = (e && (e.message || e.error_description)) || "";
   if (/Invalid login credentials/i.test(m)) return "That email and password don't match.";
+  if (/row-level security|violates|permission|not allowed/i.test(m) && (S.isAdmin || S.approver)) return "The database refused this action: " + m;
   if (/row-level security|violates|permission/i.test(m)) return "The submission was refused. Check your employee ID, or contact the credentials office.";
   if (/rate limit/i.test(m)) return "Too many attempts. Wait a few minutes and try again.";
   if (/exceeded the maximum allowed size|Payload too large/i.test(m)) return "That file is too large.";
@@ -1106,20 +1107,22 @@ function jdImportModal() {
     let lib; try { lib = JSON.parse(await f.text()); } catch (e) { summary.replaceChildren(h("p", { class: "err" }, "That file couldn't be read.")); return; }
     prepare(lib, async x => { if (!x.pdf) throw new Error(`${x.code} has no PDF in the file.`); return b64Blob(x.pdf, "application/pdf"); });
   };
-  go.onclick = () => busy(go, async () => {
+  go.onclick = () => busy(go, async () => { try { await runImport(); } catch (e) { summary.append(h("p", { class: "err" }, errText(e))); throw e; } });
+  const runImport = async () => {
     let done = 0;
     const bar = h("p", { class: "hint", role: "status" });
     summary.append(bar);
     for (const x of todo) {
       bar.textContent = `Importing ${done + 1} of ${todo.length}: ${x.title}…`;
-      const blob = await getPdf(x);
-      const path = await uploadTo("jds", `${rid()}.pdf`, new Blob([blob], { type: "application/pdf" }), "application/pdf");
+      const step = async (what, fn) => { try { return await fn(); } catch (e) { const m = (e && (e.message || e.error_description || e.error)) || String(e); throw new Error(`Stopped at ${x.code} (${x.title}) while ${what}: ${m}${done ? `. ${done} were imported; run the import again to continue.` : ""}`); } };
+      const blob = await step("loading the PDF", () => getPdf(x));
+      const path = await step("uploading the PDF to storage", () => uploadTo("jds", `${rid()}.pdf`, new Blob([blob], { type: "application/pdf" }), "application/pdf"));
       const res = await sb.from("job_descriptions").insert({ title: x.title, code: x.code, category: x.category || null, dept: TITLE_JD, positions: [], file_path: path, file_name: x.file_name || x.code + ".pdf", version: 1 });
       if (res.error && /category/.test(res.error.message || "")) throw new Error("The database needs updating first: run supabase/schema.sql again in the Supabase SQL Editor, then import again. Nothing already imported will be duplicated.");
-      must(res); done++;
+      await step("saving the job description", async () => must(res)); done++;
     }
     closeModal(); await reload(`${done} job descriptions imported`);
-  });
+  };
   openModal({ title: "Import AMH job description library", sub: "Loads the job descriptions from the AMH Job Description Library in one step. Keep this page open until it finishes.",
     body: [summary, h("details", null, h("summary", { class: "hint" }, "Use a library file instead"), h("div", { class: "drop", style: "margin-top:8px" }, file, h("span", { class: "hint" }, "Only needed for a library file sent to you separately (AMH-JD-Library-import.json)."))) ],
     foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go], wide: true });
