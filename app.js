@@ -222,6 +222,74 @@ function loadPdfJs() {
   })();
   return pdfReady;
 }
+// Renders each PDF page to a JPEG data URL (for the printable copy).
+async function pdfToImages(buf, maxPages = 30) {
+  await loadPdfJs();
+  const doc = await window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+  const out = [];
+  for (let n = 1; n <= Math.min(doc.numPages, maxPages); n++) {
+    const page = await doc.getPage(n);
+    const vp = page.getViewport({ scale: 2 });
+    const c = document.createElement("canvas"); c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+    const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    out.push(c.toDataURL("image/jpeg", 0.88));
+  }
+  return out;
+}
+const blobToDataUrl = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
+const escHtml = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtDateTime = ts => ts ? new Date(ts).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+// Opens a printable copy: the job description pages, then an approval page with every signature collected so far.
+async function printSignedJd(sig) {
+  const w = window.open("", "_blank");
+  if (!w) { toast("Allow pop-ups for this site to print.", "bad"); return; }
+  w.document.write("<!doctype html><title>Preparing…</title><p style='font:16px system-ui;padding:24px'>Preparing the signed job description…</p>");
+  try {
+    const j = S.jds.find(x => x.id === sig.jdId);
+    if (!j) throw new Error("This job description is no longer in the portal.");
+    const pdfVersion = j.version === sig.version ? j : (j.history || []).map(x => ({ path: x.file_path, version: x.version })).find(x => x.version === sig.version);
+    if (!pdfVersion) throw new Error(`The file for version ${sig.version} isn't available.`);
+    const [pages, empImg, mgrImg, hrImg] = await Promise.all([
+      getFile("jds", pdfVersion.path).then(b => b.arrayBuffer()).then(b => pdfToImages(b)),
+      getFile("credentials", sig.path).then(blobToDataUrl).catch(() => ""),
+      sig.mgrPath ? getFile("credentials", sig.mgrPath).then(blobToDataUrl).catch(() => "") : "",
+      sig.hrPath ? getFile("credentials", sig.hrPath).then(blobToDataUrl).catch(() => "") : ""]);
+    const logo = await fetch("logo.png").then(r => r.blob()).then(blobToDataUrl).catch(() => new URL("logo.png", location.href).href);
+    const st = jdStage(sig, j);
+    const block = (role, name, when, img, pending) => `<div class="sb"><div class="role">${escHtml(role)}</div>
+      <div class="img">${img ? `<img src="${img}" alt="Signature">` : `<span class="pending">${escHtml(pending)}</span>`}</div>
+      <table><tr><th>Name</th><td>${escHtml(name || "")}</td></tr><tr><th>Date &amp; time</th><td>${escHtml(fmtDateTime(when))}</td></tr></table></div>`;
+    const mgrRole = sig.designation === HEAD_DESIG ? "Director" : "Department Head";
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escHtml(`${j.code ? j.code + " " : ""}${j.title} - ${sig.fullName} (signed)`)}</title>
+<style>@page{size:A4;margin:12mm} *{box-sizing:border-box} body{margin:0;font:11pt/1.45 Carlito,Calibri,Arial,sans-serif;color:#0F1E17}
+.page{page-break-after:always} .page img{width:100%;display:block} .bar{display:none}
+@media screen{body{background:#e9efec} .page,.sig{max-width:820px;margin:16px auto;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.15)} .sig{padding:28px} .bar{display:flex;gap:8px;justify-content:center;padding:12px;position:sticky;top:0;background:#003825} .bar button{font:inherit;padding:8px 16px;border-radius:8px;border:0;cursor:pointer} .bar .p{background:#00C576;color:#003825;font-weight:700}}
+.head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #016B43;padding-bottom:8px;margin-bottom:16px} .head img{height:46px} .head .t{text-align:right;color:#016B43;font-weight:700;font-size:10pt}
+h1{font-size:16pt;margin:0 0 4px} .muted{color:#5F6478} table.info{width:100%;border-collapse:collapse;margin:12px 0 18px} table.info th,table.info td{border:1px solid #B9CFC3;padding:6px 8px;text-align:left;font-size:10pt;vertical-align:top} table.info th{background:#D5E6DD;color:#003825;width:22%}
+.sbs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px} .sb{border:1px solid #B9CFC3;border-radius:6px;padding:8px} .sb .role{font-weight:700;color:#003825;background:#D5E6DD;margin:-8px -8px 8px;padding:6px 8px;border-radius:6px 6px 0 0}
+.sb .img{height:80px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid #B9CFC3;margin-bottom:6px} .sb .img img{max-height:76px;max-width:100%} .pending{color:#A11C29;font-size:9.5pt}
+.sb table{width:100%;font-size:9pt;border-collapse:collapse} .sb th{text-align:left;color:#5F6478;font-weight:400;width:40%;padding:2px 0} .sb td{padding:2px 0}
+.ack{font-size:9.5pt;margin:14px 0} .status{display:inline-block;padding:3px 10px;border-radius:99px;font-weight:700;font-size:9.5pt;background:${st.k === "done" ? "#D9F2E5;color:#0B5A38" : "#FCE9D2;color:#8A4700"}} .foot{margin-top:18px;font-size:8.5pt;color:#5F6478}</style></head><body>
+<div class="bar"><button class="p" onclick="print()">Print / Save as PDF</button><button onclick="close()">Close</button></div>
+${pages.map(src => `<div class="page"><img src="${src}" alt="Job description page"></div>`).join("")}
+<div class="sig"><div class="head"><img src="${escHtml(logo)}" alt="Almather Hospital"><div class="t">JOB DESCRIPTION<br>ACKNOWLEDGEMENT &amp; APPROVAL</div></div>
+<h1>${escHtml(j.title)}</h1><div class="muted">${escHtml([j.code, "Version " + sig.version].filter(Boolean).join(" · "))}</div>
+<table class="info"><tr><th>Employee name</th><td>${escHtml(sig.fullName)}</td><th>Employee ID</th><td>${escHtml(sig.employeeId)}</td></tr>
+<tr><th>Department</th><td>${escHtml(deptName(sig.dept))}</td><th>Position</th><td>${escHtml(sig.position || "")}</td></tr>
+<tr><th>Designation</th><td>${escHtml(sig.designation || "—")}</td><th>Status</th><td><span class="status">${escHtml(st.label)}</span></td></tr></table>
+<p class="ack"><b>Employee:</b> I have read this job description, understand the duties and responsibilities it sets out, and accept it as the description of my role at AlMather Hospital.<br>
+<b>${escHtml(mgrRole)}:</b> I have reviewed this job description with the employee and confirm it accurately describes their role.<br>
+<b>HR Manager:</b> Approved on behalf of Human Resources as the employee's job description.</p>
+<div class="sbs">${block("Employee", sig.typedName, sig.signedAt, empImg, "Not signed")}${block(mgrRole, sig.mgrName, sig.mgrSignedAt, mgrImg, "Awaiting signature")}${block("HR Manager", sig.hrName, sig.hrSignedAt, hrImg, "Awaiting signature")}</div>
+<div class="foot">Signed electronically through the AMH Staff Credentials Portal. Printed ${escHtml(fmtDateTime(new Date().toISOString()))}${S.email ? " by " + escHtml(S.email) : ""}. Uncontrolled when printed; the electronic record is the reference.</div></div>
+<script>window.addEventListener("load",()=>setTimeout(()=>print(),400))<\/script></body></html>`;
+    w.document.open(); w.document.write(html); w.document.close();
+  } catch (e) {
+    console.error(e);
+    w.document.body.innerHTML = "<p style='font:16px system-ui;padding:24px;color:#A11C29'>The signed copy couldn't be prepared: " + escHtml(errText(e)) + "</p>";
+  }
+}
 async function renderPdf(box, buf) {
   await loadPdfJs();
   const doc = await window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
@@ -629,6 +697,7 @@ function approvalModal(sig, stage) {
     sig.hrSignedAt ? block("HR manager", sig.hrName, sig.hrSignedAt, sig.hrPath) : null);
   const body = [h("p", { class: "muted" }, `${sig.fullName} · Employee ID ${sig.employeeId} · ${deptName(sig.dept)} · ${sig.position}${sig.designation ? " · " + sig.designation : ""}`), view, h("h3", null, "Signatures"), chain];
   const foot = [h("button", { class: "btn", onclick: closeModal }, stage ? "Cancel" : "Close")];
+  if (!stage) foot.unshift(h("button", { class: "btn", onclick: () => printSignedJd(sig) }, "Print signed copy"));
   if (stage) {
     const pad = sigPad();
     const typed = h("input", { type: "text", id: "ap-name", value: S.myName || "" });
@@ -698,7 +767,7 @@ async function renderSignoff() {
         : h("div", { class: "empty" }, h("p", { class: "muted" }, "Nothing is waiting for HR."))),
     h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, `Waiting for department head or director (${mgr.length})`)), mgrBox),
     done.length ? h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, `Fully signed (${done.length})`)),
-      sigList(done.sort((a, b) => (b.sig.hrSignedAt || "").localeCompare(a.sig.hrSignedAt || "")), sig => h("button", { class: "btn sm ghost", onclick: () => approvalModal(sig, null) }, "View"))) : null);
+      sigList(done.sort((a, b) => (b.sig.hrSignedAt || "").localeCompare(a.sig.hrSignedAt || "")), sig => [h("button", { class: "btn sm ghost", onclick: () => approvalModal(sig, null) }, "View"), h("button", { class: "btn sm", onclick: () => printSignedJd(sig) }, "Print")])) : null);
   if (!mgr.length) { mgrBox.append(h("div", { class: "empty" }, h("p", { class: "muted" }, "Nothing is waiting for a manager."))); return; }
   // Flag departments with nobody assigned to sign.
   let users = [];
@@ -877,6 +946,30 @@ function reviewButtons(r, after) {
   const no = h("button", { class: "btn sm danger", onclick: () => returnModal(r, after) }, "Return");
   return r.k === "valid" || r.k === "expiring" ? [v, no] : r.k === "rejected" ? [v, ok] : r.k === "expired" ? [v] : [v, ok, no];
 }
+// Rename an uploaded document: its file name, and for additional documents also the document name.
+function renameModal(r, uid) {
+  const item = r.item, extra = !!r.c.extra;
+  const fn = item.fileName || "";
+  const dot = fn.lastIndexOf("."), base = dot > 0 ? fn.slice(0, dot) : fn, ext = dot > 0 ? fn.slice(dot) : "";
+  const title = h("input", { type: "text", id: "rn-title", maxlength: "80", value: extra ? r.c.name : "" });
+  const file = h("input", { type: "text", id: "rn-file", maxlength: "120", value: base });
+  const err = h("p", { class: "err", hidden: true });
+  const go = h("button", { class: "btn primary" }, "Save");
+  go.onclick = () => busy(go, async () => {
+    const fail = t => { err.textContent = t; err.hidden = false; };
+    const t = title.value.trim().replace(/\s+/g, " "), f = file.value.trim().replace(/[\\/:*?"<>|]+/g, "-");
+    if (extra && t.length < 2) return fail("Enter the document name.");
+    if (!f) return fail("Enter the file name.");
+    const upd = { file_name: f + ext };
+    if (extra) { const parts = item.credId.slice(EXTRA.length).split(":"); upd.cred_id = EXTRA + parts[0] + ":" + t; }
+    must(await sb.from("submissions").update(upd).eq("id", item.id));
+    closeModal(); await reload("Renamed"); if (uid) staffDetail(uid);
+  });
+  openModal({ title: "Rename document", sub: extra ? "Changes the name shown in the portal and the name of the file when downloaded." : `${r.c.name}: changes the name of the file when downloaded.`,
+    body: [extra ? h("label", { class: "f", for: "rn-title" }, h("span", { class: "req" }, "Document name"), title) : null,
+      h("label", { class: "f", for: "rn-file" }, h("span", { class: "req" }, "File name"), h("div", { class: "row", style: "flex-wrap:nowrap" }, file, ext ? h("span", { class: "muted" }, ext) : null)), err],
+    foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go] });
+}
 function staffDetail(uid) {
   const p = S.staff.find(x => x.uid === uid); if (!p) return;
   const s = summarize(p);
@@ -886,7 +979,7 @@ function staffDetail(uid) {
     list.append(h("div", { class: "cred" }, h("div", { class: "code" }, r.c.short),
       h("div", { style: "min-width:0" }, h("div", { class: "cred-name" }, r.c.name), h("div", { class: "cred-meta num" }, meta)),
       h("span", { class: "chip " + TONE[r.k] }, r.label),
-      h("div", { class: "acts" }, reviewButtons(r, () => staffDetail(uid))),
+      h("div", { class: "acts" }, reviewButtons(r, () => staffDetail(uid)), r.item ? h("button", { class: "btn sm ghost", onclick: () => renameModal(r, uid) }, "Rename") : null),
       r.k === "rejected" ? h("div", { class: "cred-note" }, "Returned: " + (r.note || "")) : null));
   }
   if (!s.rows.length) list.append(h("div", { class: "empty" }, h("p", { class: "muted" }, "No credentials are required for this department and position.")));
@@ -895,13 +988,14 @@ function staffDetail(uid) {
   for (const r of xrows) xlist.append(h("div", { class: "cred" }, h("div", { class: "code" }, "+"),
     h("div", { style: "min-width:0" }, h("div", { class: "cred-name" }, r.c.name), h("div", { class: "cred-meta num" }, [r.item.number && "No. " + r.item.number, r.item.issueDate && "Issued " + fmtDate(r.item.issueDate), r.exp ? "Expires " + fmtDate(r.exp) : null, "Submitted " + fmtTs(r.item.uploadedAt)].filter(Boolean).join(" · "))),
     h("span", { class: "chip " + TONE[r.k] }, r.label),
-    h("div", { class: "acts" }, reviewButtons(r, () => staffDetail(uid))),
+    h("div", { class: "acts" }, reviewButtons(r, () => staffDetail(uid)), h("button", { class: "btn sm ghost", onclick: () => renameModal(r, uid) }, "Rename")),
     r.k === "rejected" ? h("div", { class: "cred-note" }, "Returned: " + (r.note || "")) : null));
   const jl = h("div", { class: "list panel" });
   for (const x of s.jds) { const st = jdStage(x.sig, x.j); jl.append(h("div", { class: "cred" }, h("div", { class: "code" }, "JD"),
     h("div", { style: "min-width:0" }, h("div", { class: "cred-name" }, x.j.title), h("div", { class: "cred-meta" }, chainText(x.sig))),
     h("span", { class: "chip " + st.tone }, st.label),
     h("div", { class: "acts" }, x.sig ? h("button", { class: "btn sm ghost", onclick: () => approvalModal(x.sig, null) }, "View") : null,
+      x.sig && x.sig.version === x.j.version ? h("button", { class: "btn sm", onclick: () => printSignedJd(x.sig) }, "Print") : null,
       S.isHR && st.k === "hr" ? h("button", { class: "btn sm primary", onclick: () => approvalModal(x.sig, "hr") }, "HR sign-off") : null))); }
   if (!s.jds.length) jl.append(h("div", { class: "empty" }, h("p", { class: "muted" }, "No job description applies to this position.")));
   openModal({
