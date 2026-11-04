@@ -348,12 +348,12 @@ insert into public.settings (key, value) values ('matrix', $json$
     {"id": "or", "name": "Operating Room & PACU"}, {"id": "ward", "name": "Inpatient Wards"},
     {"id": "opd", "name": "Outpatient Clinics"}
   ],
-  "positions": ["Consultant", "Associate Consultant", "Specialist", "Resident", "Nurse Manager", "Charge Nurse", "Staff Nurse"],
+  "positions": ["Consultant", "Associate Consultant", "Assistant Consultant", "Specialist", "Resident", "Nurse Manager", "Charge Nurse", "Staff Nurse"],
   "rules": [
     {"id": "r-all", "dept": "*", "positions": [], "creds": ["scfhs", "dataflow", "cv"]},
-    {"id": "r-em", "dept": "em", "positions": ["Consultant", "Associate Consultant", "Specialist", "Resident"], "creds": ["acls", "bls", "atls", "pals"]},
+    {"id": "r-em", "dept": "em", "positions": ["Consultant", "Associate Consultant", "Assistant Consultant", "Specialist", "Resident"], "creds": ["acls", "bls", "atls", "pals"]},
     {"id": "r-anes-c", "dept": "anes", "positions": ["Consultant"], "creds": ["acls", "pals"]},
-    {"id": "r-anes-o", "dept": "anes", "positions": ["Associate Consultant", "Specialist", "Resident"], "creds": ["acls"]},
+    {"id": "r-anes-o", "dept": "anes", "positions": ["Associate Consultant", "Assistant Consultant", "Specialist", "Resident"], "creds": ["acls"]},
     {"id": "r-icu", "dept": "icu", "positions": [], "creds": ["acls"]},
     {"id": "r-nicu", "dept": "nicu", "positions": [], "creds": ["nrp"]},
     {"id": "r-nurse", "dept": "*", "positions": ["Nurse Manager", "Charge Nurse", "Staff Nurse"], "creds": ["bls"]},
@@ -362,3 +362,30 @@ insert into public.settings (key, value) values ('matrix', $json$
   ]
 }
 $json$::jsonb) on conflict (key) do nothing;
+
+-- ---------------------------------------------------------------
+-- One-time updates to a requirements list saved before these changes. Each runs once only,
+-- so a later change on the Requirements tab is never overwritten.
+-- ---------------------------------------------------------------
+do $$
+begin
+  if not exists (select 1 from public.settings where key = 'migr_assistant_consultant') then
+    -- Add "Assistant Consultant" after "Associate Consultant", with the same requirements.
+    update public.settings set value = jsonb_set(jsonb_set(value,
+      '{positions}', coalesce((
+        select jsonb_agg(x order by o, sub) from (
+          select e as x, o, 0 as sub from jsonb_array_elements(value -> 'positions') with ordinality t(e, o)
+          union all
+          select '"Assistant Consultant"'::jsonb, o, 1 from jsonb_array_elements(value -> 'positions') with ordinality t(e, o) where e = '"Associate Consultant"'::jsonb
+        ) q), '[]'::jsonb)),
+      '{rules}', coalesce((
+        select jsonb_agg(case when r -> 'positions' ? 'Associate Consultant'
+          then jsonb_set(r, '{positions}', (r -> 'positions') || '"Assistant Consultant"'::jsonb) else r end order by o)
+        from jsonb_array_elements(value -> 'rules') with ordinality t(r, o)), '[]'::jsonb))
+    where key = 'matrix' and not (value -> 'positions') ? 'Assistant Consultant';
+    -- If there was no "Associate Consultant" to place it after, add it at the end.
+    update public.settings set value = jsonb_set(value, '{positions}', (value -> 'positions') || '"Assistant Consultant"'::jsonb)
+    where key = 'matrix' and not (value -> 'positions') ? 'Assistant Consultant';
+    insert into public.settings (key, value) values ('migr_assistant_consultant', 'true'::jsonb);
+  end if;
+end $$;
