@@ -1077,39 +1077,51 @@ function renderJds() {
   setMain(head, h("section", { class: "panel" }, h("div", { class: "filters" }, h("div", { class: "grow" }, search), h("span", { class: "muted" }, `${active.length} of ${all.length}`)), list));
 }
 function b64Blob(b64, type) { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type }); }
+// Imports the AMH job description library. By default it loads the PDFs published with the portal (jd-library/);
+// an exported library file (AMH-JD-Library-import.json) can be chosen instead.
 function jdImportModal() {
-  const file = h("input", { type: "file", id: "jdi-file", accept: ".json,application/json" });
   const summary = h("div", { style: "display:flex;flex-direction:column;gap:8px" });
-  const go = h("button", { class: "btn primary", disabled: true }, "Import");
-  let todo = [];
-  file.onchange = async () => {
-    todo = []; go.disabled = true; summary.replaceChildren();
-    const f = file.files[0]; if (!f) return;
-    let lib;
-    try { lib = JSON.parse(await f.text()); } catch (e) { summary.append(h("p", { class: "err" }, "That file couldn't be read. Choose the AMH-JD-Library-import.json file.")); return; }
-    if (!lib || lib.format !== "amh-jd-library" || !Array.isArray(lib.items)) { summary.append(h("p", { class: "err" }, "That isn't a job description library file. Choose AMH-JD-Library-import.json.")); return; }
+  const go = h("button", { class: "btn primary", disabled: true }, "Checking the library…");
+  const file = h("input", { type: "file", id: "jdi-file", accept: ".json,application/json" });
+  let todo = [], getPdf = null;
+  const prepare = (lib, loader) => {
+    todo = []; getPdf = loader; summary.replaceChildren();
+    if (!lib || lib.format !== "amh-jd-library" || !Array.isArray(lib.items)) { summary.append(h("p", { class: "err" }, "That isn't a job description library file.")); go.disabled = true; go.textContent = "Import"; return; }
     const have = new Set(S.jds.filter(j => !j.archived && j.code).map(j => j.code.toLowerCase()));
-    todo = lib.items.filter(x => x.code && x.title && x.pdf && !have.has(x.code.toLowerCase()));
+    todo = lib.items.filter(x => x.code && x.title && !have.has(x.code.toLowerCase()));
     const skip = lib.items.length - todo.length;
-    summary.append(h("p", null, h("strong", null, `${lib.items.length} job descriptions in the file · ${todo.length} to import${skip ? ` · ${skip} already in the portal (skipped)` : ""}`)),
+    summary.append(h("p", null, h("strong", null, `${lib.items.length} job descriptions in the AMH library · ${todo.length} to import${skip ? ` · ${skip} already in the portal (skipped)` : ""}`)),
       h("p", { class: "hint" }, "Each one is issued as version 1. Staff choose their job title on the form and are asked to sign that job description."));
     go.disabled = !todo.length; go.textContent = todo.length ? `Import ${todo.length}` : "Nothing new to import";
+  };
+  (async () => {
+    try {
+      const r = await fetch("jd-library/index.json", { cache: "no-store" });
+      if (!r.ok) throw new Error("not found");
+      prepare(await r.json(), async x => { const p = await fetch("jd-library/" + encodeURIComponent(x.file)); if (!p.ok) throw new Error(`${x.code}.pdf couldn't be loaded from the library.`); return await p.blob(); });
+    } catch (e) { summary.replaceChildren(h("p", { class: "err" }, "The built-in library couldn't be loaded. Choose the library file below instead.")); go.textContent = "Import"; }
+  })();
+  file.onchange = async () => {
+    const f = file.files[0]; if (!f) return;
+    let lib; try { lib = JSON.parse(await f.text()); } catch (e) { summary.replaceChildren(h("p", { class: "err" }, "That file couldn't be read.")); return; }
+    prepare(lib, async x => { if (!x.pdf) throw new Error(`${x.code} has no PDF in the file.`); return b64Blob(x.pdf, "application/pdf"); });
   };
   go.onclick = () => busy(go, async () => {
     let done = 0;
     const bar = h("p", { class: "hint", role: "status" });
     summary.append(bar);
     for (const x of todo) {
-      bar.textContent = `Uploading ${done + 1} of ${todo.length}: ${x.title}…`;
-      const path = await uploadTo("jds", `${rid()}.pdf`, b64Blob(x.pdf, "application/pdf"), "application/pdf");
+      bar.textContent = `Importing ${done + 1} of ${todo.length}: ${x.title}…`;
+      const blob = await getPdf(x);
+      const path = await uploadTo("jds", `${rid()}.pdf`, new Blob([blob], { type: "application/pdf" }), "application/pdf");
       const res = await sb.from("job_descriptions").insert({ title: x.title, code: x.code, category: x.category || null, dept: TITLE_JD, positions: [], file_path: path, file_name: x.file_name || x.code + ".pdf", version: 1 });
       if (res.error && /category/.test(res.error.message || "")) throw new Error("The database needs updating first: run supabase/schema.sql again in the Supabase SQL Editor, then import again. Nothing already imported will be duplicated.");
       must(res); done++;
     }
     closeModal(); await reload(`${done} job descriptions imported`);
   });
-  openModal({ title: "Import job description library", sub: "Loads every job description from the AMH library file in one step.",
-    body: [h("div", { class: "drop" }, file, h("span", { class: "hint" }, "Choose AMH-JD-Library-import.json. Job descriptions already in the portal (same code) are skipped, so it's safe to run again.")), summary],
+  openModal({ title: "Import AMH job description library", sub: "Loads the job descriptions from the AMH Job Description Library in one step. Keep this page open until it finishes.",
+    body: [summary, h("details", null, h("summary", { class: "hint" }, "Use a library file instead"), h("div", { class: "drop", style: "margin-top:8px" }, file, h("span", { class: "hint" }, "Only needed for a library file sent to you separately (AMH-JD-Library-import.json)."))) ],
     foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go], wide: true });
 }
 function jdModal(j) {
