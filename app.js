@@ -56,7 +56,7 @@ function armed(btn, label, fn) {
 const S = {
   ready: false, isAdmin: false, isHR: false, approver: false, role: "", depts: [], myName: "", queue: [], email: "",
   matrix: null, jds: [], staff: [], roster: [], rq: "", tab: "compliance", built: null,
-  person: null, sent: {}, signed: {}, finished: false,
+  person: null, sent: {}, signed: {}, extras: [], finished: false,
   f: { dept: "", status: "", q: "" }, draft: null, dirty: false
 };
 let sb = null;
@@ -138,9 +138,14 @@ function summarize(p) {
   else overall = { k: "ok", label: rows.length ? "Compliant" : "No requirements" };
   return { rows, jds, counts, jdOut, overall };
 }
+// Additional (optional) certificates: cred_id is "extra:<id>:<name typed by the staff member>".
+const EXTRA = "extra:";
+const extraTitle = credId => credId.slice(EXTRA.length).split(":").slice(1).join(":") || "Additional certificate";
+const extraRows = p => (p.extras || []).map(item => { const c = { id: item.credId, short: "+", name: item.title, extra: true }; return { c, item, ...evalCred(c, item) }; })
+  .sort((a, b) => (b.item.uploadedAt || "").localeCompare(a.item.uploadedAt || ""));
 function pendingQueue() {
   const out = [];
-  for (const p of S.staff) for (const r of summarize(p).rows) if (r.k === "pending") out.push({ p, ...r });
+  for (const p of S.staff) for (const r of [...summarize(p).rows, ...extraRows(p)]) if (r.k === "pending") out.push({ p, ...r });
   return out.sort((a, b) => (a.item.uploadedAt || "").localeCompare(b.item.uploadedAt || ""));
 }
 
@@ -162,10 +167,11 @@ async function refresh() {
   if (S.isAdmin) {
     const [subs, sigs, roster] = await Promise.all([fetchAll("current_submissions"), fetchAll("jd_signatures"), fetchAll("roster")]);
     const by = {};
-    const person = (eid) => { const k = eid.trim().toLowerCase(); return by[k] || (by[k] = { uid: k, employeeId: eid.trim(), fullName: "", dept: "", position: "", mobile: "", jobCode: "", jobCode2: "", designation: "", updatedAt: "", creds: {}, signatures: {}, onRoster: false, hasSubmitted: false }); };
+    const person = (eid) => { const k = eid.trim().toLowerCase(); return by[k] || (by[k] = { uid: k, employeeId: eid.trim(), fullName: "", dept: "", position: "", mobile: "", jobCode: "", jobCode2: "", designation: "", updatedAt: "", creds: {}, extras: [], signatures: {}, onRoster: false, hasSubmitted: false }); };
     const touchPerson = (u, r, ts) => { u.hasSubmitted = true; if (!u.updatedAt || ts > u.updatedAt) { u.updatedAt = ts; if (!u.onRoster || !u.fullName) u.fullName = r.full_name; if (!u.onRoster || !u.dept) { u.dept = r.dept; u.position = r.position; } if (r.mobile) u.mobile = r.mobile; if (r.job_code) u.jobCode = r.job_code; if ("designation" in r) { u.designation = r.designation || ""; u.jobCode2 = r.job_code2 || ""; } } };
     for (const r of roster) { const u = person(r.employee_id); u.onRoster = true; u.fullName = r.full_name || ""; u.dept = r.dept || ""; u.position = r.position || ""; }
     for (const r of subs) { const u = person(r.employee_id);
+      if (r.cred_id.startsWith(EXTRA)) { u.extras.push({ id: r.id, credId: r.cred_id, title: extraTitle(r.cred_id), number: r.number, issueDate: r.issue_date, expiryDate: r.expiry_date, path: r.file_path, fileName: r.file_name, fileType: r.file_type, uploadedAt: r.uploaded_at, status: r.status, note: r.review_note, asName: r.full_name }); touchPerson(u, r, r.uploaded_at); continue; }
       u.creds[r.cred_id] = { id: r.id, number: r.number, classification: r.classification, specialty: r.specialty, issueDate: r.issue_date, expiryDate: r.expiry_date, path: r.file_path, fileName: r.file_name, fileType: r.file_type, uploadedAt: r.uploaded_at, status: r.status, note: r.review_note, asName: r.full_name };
       touchPerson(u, r, r.uploaded_at); }
     for (const r of sigs) { const u = person(r.employee_id); const cur = u.signatures[r.jd_id];
@@ -372,9 +378,16 @@ function renderStaff() {
       h("div", { class: "acts" }, s ? h("button", { class: "btn sm ghost", onclick: () => showDoc(j.title, `Version ${j.version}`, jdBlob(j.path), j.fileName) }, "View")
         : h("button", { class: "btn sm primary", onclick: () => signModal(j) }, "Review and sign"))));
   }
-  const parts = [head, ann, who, creds].filter(Boolean);
+  const xl = h("div", { class: "list" });
+  for (const x of S.extras) xl.append(h("div", { class: "cred" }, h("div", { class: "code" }, "+"),
+    h("div", { style: "min-width:0" }, h("div", { class: "cred-name" }, x.title), h("div", { class: "cred-meta num" }, [x.number && "No. " + x.number, x.expiryDate ? "Expires " + fmtDate(x.expiryDate) : null, x.fileName].filter(Boolean).join(" · "))),
+    h("span", { class: "chip ok" }, "Submitted"), h("div", { class: "acts" })));
+  if (!S.extras.length) xl.append(h("div", { class: "empty" }, h("p", { class: "muted" }, "Have other certificates, for example NALS, a fellowship, a workshop or training certificate? Add them here.")));
+  const extras = h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, "Additional certificates"), h("span", { class: "muted" }, "Optional")), xl,
+    h("div", { class: "panel-body" }, h("button", { class: "btn", onclick: extraModal }, S.extras.length ? "Add another certificate" : "Add a certificate")));
+  const parts = [head, ann, who, creds, extras].filter(Boolean);
   if (jlist.length) parts.push(h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, jlist.length > 1 ? "Job descriptions" : "Job description"), jlist.length > 1 ? h("span", { class: "muted" }, "Sign each one") : null), jl));
-  const nSent = Object.keys(S.sent).length + Object.keys(S.signed).length;
+  const nSent = Object.keys(S.sent).length + Object.keys(S.signed).length + S.extras.length;
   parts.push(h("div", { class: "savebar" }, h("span", { class: "grow" }, nSent ? `${nSent} item${nSent === 1 ? "" : "s"} submitted` : "Nothing submitted yet"),
     h("button", { class: "btn primary", disabled: !nSent, onclick: () => { S.finished = true; render(); window.scrollTo(0, 0); } }, "I'm finished")));
   setMain(...parts);
@@ -425,7 +438,7 @@ function detailsPanel() {
     if (v.fullName.length < 2) { err.textContent = "Enter your full name."; err.hidden = false; return; }
     const ok = await sb.rpc("employee_ok", { eid: v.employeeId });
     if (ok.data === false) { err.textContent = "That employee ID isn't on the staff list. Check the number, or contact the credentials office."; err.hidden = false; return; }
-    if (!S.lastPerson || S.lastPerson.employeeId !== v.employeeId) { S.sent = {}; S.signed = {}; }
+    if (!S.lastPerson || S.lastPerson.employeeId !== v.employeeId) { S.sent = {}; S.signed = {}; S.extras = []; }
     S.person = v; S.lastPerson = v; render(); window.scrollTo(0, 0);
   });
   return h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, "Your details"), h("span", { class: "muted" }, "Use your name as it appears on your SCFHS registration")),
@@ -442,14 +455,15 @@ function detailsPanel() {
       preview, err, h("div", { class: "row" }, go)));
 }
 function finishedPanel() {
-  const items = Object.entries(S.sent).map(([id, s]) => ((M().credentials.find(c => c.id === id) || {}).short || id) + (s.fileName ? " (" + s.fileName + ")" : ""));
+  const items = Object.entries(S.sent).map(([id, s]) => ((M().credentials.find(c => c.id === id) || {}).short || id) + (s.fileName ? " (" + s.fileName + ")" : ""))
+    .concat(S.extras.map(x => x.title + (x.fileName ? " (" + x.fileName + ")" : "")));
   const jds = Object.keys(S.signed).map(id => "Job description: " + ((S.jds.find(j => j.id === id) || {}).title || ""));
   return h("div", { class: "panel empty" }, h("h2", null, "Thank you, your documents were submitted"),
     h("p", { class: "muted" }, `Submitted for ${S.person.fullName} (employee ID ${S.person.employeeId}). The credentials office will review them and contact you if anything is missing.`),
     h("ul", { class: "done-list" }, [...items, ...jds].map(t => h("li", null, t))),
     h("p", { class: "hint" }, "You can close this page now."),
     h("div", { class: "row" }, h("button", { class: "btn", onclick: () => { S.finished = false; render(); } }, "Add more documents"),
-      h("button", { class: "btn ghost", onclick: () => { S.finished = false; S.person = null; S.lastPerson = null; S.sent = {}; S.signed = {}; render(); } }, "Start over for someone else")));
+      h("button", { class: "btn ghost", onclick: () => { S.finished = false; S.person = null; S.lastPerson = null; S.sent = {}; S.signed = {}; S.extras = []; render(); } }, "Start over for someone else")));
 }
 const personFields = () => ({ employee_id: S.person.employeeId, full_name: S.person.fullName, dept: S.person.dept, position: S.person.position, job_code: S.person.jobCode || null, designation: S.person.designation || null, job_code2: S.person.jobCode2 || null });
 // Inserts a staff record. If the database hasn't been updated with a newer column yet, retries without it so submissions still go through.
@@ -514,6 +528,38 @@ function credModal(c) {
   });
 }
 
+function extraModal() {
+  const name = h("input", { type: "text", id: "ex-name", maxlength: "80", placeholder: "For example NALS, Fellowship certificate, Ultrasound course" });
+  const num = h("input", { type: "text", id: "ex-num" });
+  const issue = h("input", { type: "date", id: "ex-issue", max: todayIso() });
+  const exp = h("input", { type: "date", id: "ex-exp" });
+  const file = h("input", { type: "file", id: "ex-file", accept: "application/pdf,image/jpeg,image/png" });
+  const err = h("p", { class: "err", hidden: true });
+  const save = h("button", { class: "btn primary" }, "Submit");
+  save.onclick = () => busy(save, async () => {
+    err.hidden = true;
+    const fail = m => { err.textContent = m; err.hidden = false; };
+    const title = name.value.trim().replace(/\s+/g, " ");
+    if (title.length < 2) return fail("Enter the name of the certificate.");
+    if (exp.value && issue.value && exp.value <= issue.value) return fail("The expiry date must be after the issue date.");
+    if (!file.files[0]) return fail("Attach the certificate.");
+    let prep; try { prep = await prepareFile(file.files[0]); } catch (e) { return fail(e.message); }
+    const id = rid();
+    const path = await uploadTo("credentials", `${incomingDir()}/extra-${id}.${prep.ext}`, prep.blob, prep.type);
+    const rec = { cred_id: EXTRA + id + ":" + title, number: num.value.trim() || null, issue_date: issue.value || null, expiry_date: exp.value || null, file_path: path, file_name: prep.name, file_type: prep.type, file_size: prep.blob.size };
+    await insertRow("submissions", { ...personFields(), mobile: S.person.mobile || null, ...rec });
+    S.extras.push({ title, number: rec.number, expiryDate: rec.expiry_date, fileName: rec.file_name });
+    closeModal(); render(); toast(`${title} submitted`);
+  });
+  openModal({ title: "Add a certificate", sub: "Any certificate not listed above. The credentials office reviews it with the others.",
+    body: [h("div", { class: "grid2" },
+      h("label", { class: "f full", for: "ex-name" }, h("span", { class: "req" }, "Certificate name"), name),
+      h("label", { class: "f full", for: "ex-num" }, "Certificate number (optional)", num),
+      h("label", { class: "f", for: "ex-issue" }, "Issue date (optional)", issue),
+      h("label", { class: "f", for: "ex-exp" }, "Expiry date (if any)", exp)),
+      h("div", { class: "drop" }, file, h("span", { class: "hint" }, "PDF up to 5 MB, or a clear photo (JPG/PNG).")), err],
+    foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), save] });
+}
 function sigPad() {
   const c = h("canvas", { class: "sig", width: 900, height: 240, "aria-label": "Signature pad. Draw your signature." });
   const ctx = c.getContext("2d"); let down = false, has = false;
@@ -730,6 +776,7 @@ function exportCsv() {
   for (const p of S.staff) {
     const s = summarize(p), sc = p.creds.scfhs || {};
     const who = [p.employeeId, p.fullName, deptName(p.dept), p.position, jobTitle(p.jobCode), [p.designation, jobTitle(p.jobCode2)].filter(Boolean).join(": "), p.mobile, sc.number, sc.classification, sc.specialty];
+    for (const r of extraRows(p)) lines.push([...who, "Additional: " + r.c.name, r.label, r.item.number, r.item.issueDate, r.exp, r.item.uploadedAt && r.item.uploadedAt.slice(0, 10)].map(esc).join(","));
     for (const r of s.rows) lines.push([...who, r.c.short, r.label, r.item && r.item.number, r.item && r.item.issueDate, r.exp, r.item && r.item.uploadedAt && r.item.uploadedAt.slice(0, 10)].map(esc).join(","));
     for (const x of s.jds) lines.push([...who, "JD: " + x.j.title + " v" + x.j.version, jdStage(x.sig, x.j).label, "", "", "", x.sig && x.sig.signedAt && x.sig.signedAt.slice(0, 10)].map(esc).join(","));
   }
@@ -744,7 +791,7 @@ function returnModal(r, after) {
   const note = h("textarea", { id: "rv-note", rows: "3", placeholder: "For example: certificate has expired, or the image is unreadable." });
   const go = h("button", { class: "btn primary" }, "Mark as returned");
   go.onclick = () => busy(go, async () => { if (!note.value.trim()) { note.focus(); return; } await setReview(r.item, "rejected", note.value.trim()); closeModal(); after && after(); });
-  openModal({ title: "Return " + r.c.short, sub: "Staff don't sign in, so contact the person with this reason and ask them to submit again.", body: h("label", { class: "f", for: "rv-note" }, "Reason", note), foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go] });
+  openModal({ title: "Return " + (r.c.extra ? r.c.name : r.c.short), sub: "Staff don't sign in, so contact the person with this reason and ask them to submit again.", body: h("label", { class: "f", for: "rv-note" }, "Reason", note), foot: [h("button", { class: "btn", onclick: closeModal }, "Cancel"), go] });
 }
 function reviewButtons(r, after) {
   if (!r.item) return [];
@@ -767,6 +814,13 @@ function staffDetail(uid) {
       r.k === "rejected" ? h("div", { class: "cred-note" }, "Returned: " + (r.note || "")) : null));
   }
   if (!s.rows.length) list.append(h("div", { class: "empty" }, h("p", { class: "muted" }, "No credentials are required for this department and position.")));
+  const xrows = extraRows(p);
+  const xlist = h("div", { class: "list panel" });
+  for (const r of xrows) xlist.append(h("div", { class: "cred" }, h("div", { class: "code" }, "+"),
+    h("div", { style: "min-width:0" }, h("div", { class: "cred-name" }, r.c.name), h("div", { class: "cred-meta num" }, [r.item.number && "No. " + r.item.number, r.item.issueDate && "Issued " + fmtDate(r.item.issueDate), r.exp ? "Expires " + fmtDate(r.exp) : null, "Submitted " + fmtTs(r.item.uploadedAt)].filter(Boolean).join(" · "))),
+    h("span", { class: "chip " + TONE[r.k] }, r.label),
+    h("div", { class: "acts" }, reviewButtons(r, () => staffDetail(uid))),
+    r.k === "rejected" ? h("div", { class: "cred-note" }, "Returned: " + (r.note || "")) : null));
   const jl = h("div", { class: "list panel" });
   for (const x of s.jds) { const st = jdStage(x.sig, x.j); jl.append(h("div", { class: "cred" }, h("div", { class: "code" }, "JD"),
     h("div", { style: "min-width:0" }, h("div", { class: "cred-name" }, x.j.title), h("div", { class: "cred-meta" }, chainText(x.sig))),
@@ -777,7 +831,7 @@ function staffDetail(uid) {
   openModal({
     title: p.fullName || "Staff member", sub: [deptName(p.dept), p.position || "—", jobTitle(p.jobCode), p.designation, "Employee ID " + p.employeeId].filter(Boolean).join(" · "), wide: true,
     body: [h("div", { class: "row" }, h("span", { class: "chip " + s.overall.k }, s.overall.label), p.mobile ? h("span", { class: "muted num" }, p.mobile) : null, p.onRoster ? h("span", { class: "muted" }, "On staff roster") : null),
-      h("h3", null, "Credentials"), list, h("h3", null, "Job description"), jl],
+      h("h3", null, "Credentials"), list, xrows.length ? [h("h3", null, "Additional certificates"), xlist] : null, h("h3", null, "Job description"), jl],
     foot: [h("button", { class: "btn primary", onclick: closeModal }, "Done")]
   });
 }
